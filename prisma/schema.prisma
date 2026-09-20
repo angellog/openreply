@@ -86,6 +86,8 @@ model Workspace {
   operationalEvents OperationalEvent[]
 
   @@index([ownerId])
+  whatsappLeads     WhatsAppLead[]
+  whatsappMessages  WhatsAppMessage[]
 }
 
 model WorkspaceMember {
@@ -143,6 +145,7 @@ model InstagramAccount {
   followerSnapshots FollowerSnapshot[]
 
   @@index([workspaceId])
+  whatsappLeads WhatsAppLead[]
 }
 
 /// Daily follower total for one account. Instagram only retains ~30 days of
@@ -215,6 +218,7 @@ model Automation {
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
+  whatsappLeads    WhatsAppLead[]
 }
 
 model DmLog {
@@ -285,6 +289,7 @@ model TrackedLink {
 
   @@index([workspaceId])
   @@index([automationId])
+  whatsappLeads WhatsAppLead[]
 }
 
 model LinkClick {
@@ -385,4 +390,63 @@ enum OperationalEventLevel {
   INFO
   WARNING
   ERROR
+}
+
+/// A WhatsApp conversation that started from an Instagram campaign. The customer
+/// always messages first (the DM hands them a wa.me link), so the ref slug in
+/// that first message is what ties the chat back to the post it came from.
+model WhatsAppLead {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  automationId       String?
+  instagramAccountId String?
+  trackedLinkId      String?
+  /// Provider chat id, e.g. "256700123456@c.us".
+  chatId             String
+  /// Which connected number this chat arrived on (OpenWA session id). Null for
+  /// leads recorded before multi-number support.
+  sessionId          String?
+  phone              String?
+  displayName        String?
+  /// TrackedLink.slug parsed out of the customer's first message.
+  refSlug            String?
+  lastInboundAt      DateTime?
+  lastOutboundAt     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation       Automation?       @relation(fields: [automationId], references: [id], onDelete: SetNull)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: SetNull)
+  trackedLink      TrackedLink?      @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+  messages         WhatsAppMessage[]
+
+  @@unique([workspaceId, chatId])
+  @@index([workspaceId])
+  @@index([automationId])
+  @@index([createdAt])
+}
+
+model WhatsAppMessage {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  leadId            String
+  direction         WhatsAppDirection
+  /// Provider message id. Inbound ids double as the dedup key for webhook retries.
+  providerMessageId String?
+  body              String
+  errorMessage      String?
+  createdAt         DateTime          @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      WhatsAppLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, providerMessageId])
+  @@index([workspaceId])
+  @@index([createdAt])
+}
+
+enum WhatsAppDirection {
+  INBOUND
+  OUTBOUND
 }
