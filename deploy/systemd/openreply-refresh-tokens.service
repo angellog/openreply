@@ -1,0 +1,9 @@
+[Unit]
+Description=OpenReply — refresh Instagram access tokens
+Documentation=https://github.com/diwenne/openreply
+After=openreply-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openreply-cron refresh-tokens
+SyslogIdentifier=openreply-refresh-tokens

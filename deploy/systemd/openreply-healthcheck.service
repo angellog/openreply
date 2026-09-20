@@ -1,0 +1,7 @@
+[Unit]
+Description=OpenReply — liveness watchdog for web and worker
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openreply-healthcheck
+SyslogIdentifier=openreply-healthcheck

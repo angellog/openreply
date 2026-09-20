@@ -1,0 +1,14 @@
+[Unit]
+Description=Renew Instagram tokens daily (they expire ~60 days after issue)
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+# Do not let every OpenReply box on the internet hit Meta at exactly 05:00.
+RandomizedDelaySec=900
+# If the VPS was off or rebooting at 05:00, run on the next boot instead of
+# skipping the day. Tokens are renewed 10 days before expiry, so a handful of
+# missed runs is survivable — a run that silently never happens is not.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

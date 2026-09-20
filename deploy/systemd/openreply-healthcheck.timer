@@ -1,0 +1,11 @@
+[Unit]
+Description=Check that the web app answers and the worker is heartbeating
+
+[Timer]
+# Five minutes is a deliberate floor: the worker heartbeat has a 120s TTL, so
+# anything faster risks acting on a heartbeat that is merely between writes.
+OnBootSec=3min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

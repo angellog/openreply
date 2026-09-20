@@ -1,0 +1,48 @@
+[Unit]
+Description=OpenReply web app (Next.js)
+Documentation=https://github.com/diwenne/openreply
+# Both datastores are local, so wait for them rather than crash-looping at boot.
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+# Give up rather than crash-loop forever on a genuinely broken build; the
+# healthcheck timer reports it and Caddy serves a clear 502 meanwhile. These
+# two belong in [Unit] — systemd silently ignores them under [Service].
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User={{APP_USER}}
+Group={{APP_USER}}
+WorkingDirectory={{APP_DIR}}
+EnvironmentFile=/etc/openreply/openreply.env
+
+# Invoke Next's bin directly rather than through npm, so systemd supervises the
+# server process itself and signals reach it without an npm shim in between.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --port {{APP_PORT}}
+
+Restart=always
+RestartSec=3
+
+# Requests in flight get a moment to finish on restart. Webhook deliveries that
+# do miss the window are re-sent by Meta and, failing that, swept up by the
+# worker's polling reconciler — a brief restart cannot lose a comment.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{APP_DIR}}/.next
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openreply-web
+
+[Install]
+WantedBy=multi-user.target

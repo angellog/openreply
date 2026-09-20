@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenReply — nightly database backup
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openreply-backup
+SyslogIdentifier=openreply-backup
+# Never let a backup starve the app of I/O.
+IOSchedulingClass=idle
+Nice=10

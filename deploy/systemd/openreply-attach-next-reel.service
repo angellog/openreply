@@ -1,0 +1,9 @@
+[Unit]
+Description=OpenReply — bind "next reel" targets to a published reel
+Documentation=https://github.com/diwenne/openreply
+After=openreply-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openreply-cron attach-next-reel
+SyslogIdentifier=openreply-attach-next-reel

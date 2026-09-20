@@ -1,0 +1,44 @@
+[Unit]
+Description=OpenReply DM worker (BullMQ consumer and comment reconciler)
+Documentation=https://github.com/diwenne/openreply
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+# [Unit], not [Service] — systemd ignores these under [Service].
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User={{APP_USER}}
+Group={{APP_USER}}
+WorkingDirectory={{APP_DIR}}
+EnvironmentFile=/etc/openreply/openreply.env
+
+# This is the process that actually sends DMs. The web app only receives
+# webhooks and queues jobs — without this running, comments arrive, jobs pile
+# up in Redis, and no message is ever delivered.
+ExecStart=/usr/bin/node node_modules/.bin/tsx worker/dm-worker.ts
+
+Restart=always
+RestartSec=5
+
+# The worker traps SIGTERM and closes the BullMQ consumer cleanly, returning any
+# in-flight job to the queue instead of losing it. Give it room to finish.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openreply-worker
+
+[Install]
+WantedBy=multi-user.target

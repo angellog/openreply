@@ -1,0 +1,14 @@
+[Unit]
+Description=Bind "next reel" targets shortly after the reel goes up
+
+[Timer]
+# Instagram sends no webhook when media is published, so this polls. Vercel's
+# free plan caps a cron at once per day, which meant a next-reel target could
+# sit idle for 24 hours after the reel was posted. A VPS has no such cap, so
+# run it every 15 minutes and the target goes live within a quarter hour.
+OnCalendar=*:0/15
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

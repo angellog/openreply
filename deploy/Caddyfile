@@ -1,0 +1,46 @@
+# OpenReply reverse proxy — template.
+#
+# provision.sh and set-domain.sh substitute @@DOMAIN@@, @@APP_PORT@@, and
+# @@ACME_EMAIL@@ and write the result to /etc/caddy/Caddyfile. Edit that file,
+# or re-run deploy/set-domain.sh, rather than hand-editing the copy on disk.
+#
+# The placeholders are @@NAME@@ rather than {{NAME}} on purpose: `{` is Caddy's
+# own placeholder delimiter, and `caddy fmt` rewrites `{{DOMAIN}}` to
+# `{DOMAIN}}`, quietly corrupting the template. This file is not valid Caddy
+# config until substituted, so validate the output, never this.
+#
+# Caddy obtains and renews the Let's Encrypt certificate on its own, which is
+# the whole reason it is here: Meta will not deliver webhooks to an endpoint
+# without a publicly-trusted certificate, and a lapsed certificate silently
+# stops every comment from arriving.
+{
+	email @@ACME_EMAIL@@
+}
+
+@@DOMAIN@@ {
+	encode zstd gzip
+
+	# Meta signs webhook deliveries over the exact request body, and the app
+	# verifies that signature. Nothing may rewrite or re-encode the body in
+	# transit, so this is a plain pass-through.
+	#
+	# No header_up directives: Caddy already forwards the original Host and sets
+	# X-Forwarded-Proto and X-Forwarded-For itself. Restating them is what Caddy
+	# warns about, and X-Forwarded-Proto is what tells Auth.js it is behind HTTPS.
+	reverse_proxy 127.0.0.1:@@APP_PORT@@
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/openreply.log {
+			roll_size 20mb
+			roll_keep 5
+		}
+	}
+}
