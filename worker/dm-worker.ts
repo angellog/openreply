@@ -1,3 +1,11 @@
+// Load .env before anything that reads process.env at import time. Next.js does
+// this for the web app, but the worker is a plain tsx process and does not get
+// it for free — without this, DATABASE_URL is unset locally and every
+// reconciliation sweep fails while the heartbeat keeps reporting healthy.
+// dotenv never overwrites a variable that is already set, so platform-injected
+// configuration (Railway, Fly, Render) still wins in production.
+import "dotenv/config";
+
 import { createDMWorker } from "@/lib/queue/dm-worker";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";

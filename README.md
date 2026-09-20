@@ -14,12 +14,6 @@ Someone comments `LINK` on your reel, and they get a DM with your link a second 
 
 ManyChat does this and charges a monthly fee. OpenReply is the same core feature, free, running on your own infrastructure, with no seat limits and no plan caps.
 
-> **OpenReply is self-hosted. You have to deploy your own copy.**
->
-> [openreply.diwen.dev](https://openreply.diwen.dev) is a demo of the dashboard, not a service you can sign up for. Creating an account there will never send a DM for you, and there is no hosted plan to upgrade to.
->
-> Instagram automation runs against *your* Meta app, and Meta ties that app to a domain and a webhook URL you control. So a working instance means: your fork deployed, your domain pointed at it, your Meta app created, and your webhook registered. [docs/setup.md](docs/setup.md) walks through all of it.
-
 > If this saves you a subscription or a weekend of building, a star on the repo genuinely helps other people find it.
 
 ## Why this exists
@@ -32,10 +26,7 @@ OpenReply is built around Meta's official Instagram private replies. It does not
 
 - Keyword to DM. Match one or many keywords per post, whole-word or partial.
 - Optional public reply. Post a visible comment reply on top of the DM.
-- DM and Story reply triggers. The same keywords can also fire on an inbound DM, which covers text replies to your Stories, since Instagram delivers those as DMs. That makes `Reply LINK to this Story` work with no post involved. Turn it on per campaign, and subscribe to the `messages` webhook field when you set up your Meta app.
 - Tracked links. Swap a link for a tracked redirect and see clicks and CTR per campaign.
-- Two link buttons. Send up to two tappable link buttons in one DM, each a separate tracked link with its own click stats.
-- Follow gate. Optionally require a follow before you hand over the link. The DM asks the commenter to follow and tap a button; on tap, OpenReply checks Meta's `is_user_follow_business` flag and only sends the link once they follow, re-prompting until then. It fails open (sends the link anyway) when Instagram does not return follow status, so a real follower is never trapped.
 - Personalization. Use `{username}` in your message to greet the commenter by name.
 - Per-account rate limiting. Stays under Meta's documented cap of 750 private replies per hour, and queues the overflow instead of dropping it.
 - Multiple Instagram accounts. Connect several professional accounts under one workspace, each with its own limits.
@@ -47,9 +38,9 @@ OpenReply is built around Meta's official Instagram private replies. It does not
 
 ## How it works
 
-1. Someone comments on your Instagram post or reel, or DMs you, or replies to your Story.
+1. Someone comments on your Instagram post or reel.
 2. Meta sends a webhook to your OpenReply instance.
-3. OpenReply checks the text against your active campaigns.
+3. OpenReply checks the comment against your active campaigns.
 4. On a keyword match, it queues a job.
 5. A background worker sends the private reply, and the public reply if you enabled one.
 
@@ -63,9 +54,27 @@ The honest version: the code deploys in minutes, but the Meta app setup is the p
 
 ### Deploy the web app
 
-This is the part people skip. There is no shared instance to join — the button below creates *your* deployment, on *your* domain, which is the only thing your Meta app is allowed to talk to.
-
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/diwenne/openreply)
+
+### Or run the whole thing on one VPS
+
+Web app, worker, Postgres, and Redis on a single box you control, with automatic
+HTTPS and no Docker:
+
+```bash
+sudo git clone https://github.com/diwenne/openreply.git /srv/openreply
+sudo /srv/openreply/deploy/provision.sh
+```
+
+That installs the dependencies, generates the secrets, sets up systemd units for
+both processes, replaces Vercel's crons with systemd timers, and configures
+Caddy, the firewall, nightly backups, and a liveness watchdog. See
+[deploy/README.md](deploy/README.md).
+
+Note that the two jobs in `vercel.json` do not run themselves anywhere else —
+`refresh-tokens` in particular renews Instagram tokens before they expire, and
+an instance without it goes quiet after about sixty days. The VPS kit schedules
+both.
 
 ### Run it locally
 
@@ -82,6 +91,12 @@ npm run worker            # in a second terminal, this sends the DMs
 
 Two processes, always. `npm run dev` serves the app and receives webhooks. `npm run worker` is what actually sends the messages. If comments come in and no DM ever arrives, the worker is the first thing to check.
 
+### Set it up in the browser
+
+With the app running, open [localhost:3000/setup](http://localhost:3000/setup). The Setup Console fills in `.env` for you, generates the secrets in the right shape, runs live checks against Postgres, Redis, the worker, Resend, and the webhook handshake, hands you every URL Meta asks for as a copy button, signs you into the dashboard without waiting on email, and lets you connect Instagram accounts and add targets.
+
+It is open in development and closed in production unless you deliberately open it with a token, because it writes `.env` and can create a session without a password. See [docs/setup-console.md](docs/setup-console.md).
+
 Full environment variables and the production layout are in [docs/setup.md](docs/setup.md).
 
 ## Set it up with your AI assistant
@@ -97,8 +112,6 @@ If you use Claude Code, Cursor, or a similar tool, the Meta setup is a lot faste
 - Tailwind CSS for the interface
 - The official Instagram API with Instagram Login
 
-For the complete stack — application libraries, the two runtime processes, and the free services this runs on (Vercel, Neon, Redis Cloud, an Oracle Cloud always-free VM for the worker, Resend, Meta) — see [docs/stack.md](docs/stack.md).
-
 ## Contributing
 
 Issues and pull requests are welcome. If you hit a Meta quirk that is not in the setup guide, a PR that documents it is worth as much as a code fix, because that is where everyone loses time.
@@ -111,7 +124,7 @@ Built and maintained by Diwen Huang.
 
 - GitHub: [@diwenne](https://github.com/diwenne)
 - Website: [diwenhuang.ca](https://diwenhuang.ca)
-- X: [@diwenne](https://x.com/diwennee)
+- X: [@diwenne](https://x.com/diwenne)
 - Instagram: [@devdiwen](https://instagram.com/devdiwen)
 
 OpenReply is a fork of [instagram-comment-to-dm](https://github.com/im-anishraj/instagram-comment-to-dm) by [Anish Raj](https://github.com/im-anishraj), also MIT licensed. The billing layer and plan caps were removed, and the setup was documented from scratch.
