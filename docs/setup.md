@@ -234,6 +234,33 @@ Hit `/api/health` any time. It reports the database, Redis, queue, and worker he
 
 If you want to inspect where a comment stopped, the Postgres tables tell you: `WebhookEvent` for delivery, `DmLog` for send status and errors, `OperationalEvent` for worker crashes and the polling reconciler's sweep logs.
 
+## Forwarding events to an external agent (optional)
+
+Meta lets an app register one webhook URL, and OpenReply owns it. If another
+service also needs the account's comments and DMs (for example an AI agent that
+answers them), OpenReply can forward every verified webhook to it:
+
+| Variable | Where | Value |
+|---|---|---|
+| `AGENT_RELAY_URL` | web app and worker | The agent's endpoint, e.g. `https://agent.example.com/webhooks/openreply` |
+| `AGENT_RELAY_SECRET` | web app and worker | A long random string, shared with the agent |
+| `AGENT_RELAY_ACCOUNT_IDS` | web app and worker | Comma-separated Instagram account ids to forward. Empty forwards every account. |
+
+How it behaves:
+
+- The body is forwarded only after OpenReply has verified Meta's signature, and
+  it is sent after the webhook response, so it never slows down or fails Meta's
+  delivery.
+- Each request carries `x-openreply-signature: t=<unix seconds>,v1=<hex>`, where
+  `v1` is HMAC-SHA256 of `<t>.<body>` with the shared secret. Receivers should
+  reject timestamps older than five minutes.
+- Entries for accounts outside `AGENT_RELAY_ACCOUNT_IDS` are removed first.
+- If the agent is down, the delivery goes onto the `agent-relay` queue and the
+  worker retries it with exponential backoff for about four hours.
+- OpenReply's own campaigns keep working exactly as before. To stop the agent
+  from also answering a campaign keyword, give the agent the same keywords (for
+  ai-instagram-agent: `OPENREPLY_DEFER_KEYWORDS`).
+
 ## Local development
 
 You need Postgres and Redis. The included `docker-compose.yml` starts both:

@@ -1,9 +1,12 @@
 import { createDMWorker } from "@/lib/queue/dm-worker";
+import { createAgentRelayWorker } from "@/lib/agent-relay";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import os from "node:os";
 
 const worker = createDMWorker();
+// Retries webhook deliveries to an external agent (AGENT_RELAY_URL); null when not configured.
+const relayWorker = createAgentRelayWorker();
 const startedAt = new Date().toISOString();
 const HEARTBEAT_INTERVAL_MS = 30_000;
 // Polling safety net for comments that webhooks miss. Runs in the worker because
@@ -47,7 +50,7 @@ async function shutdown(signal: string) {
   console.log(`[DM Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearInterval(pollTimer);
-  await worker.close();
+  await Promise.all([worker.close(), relayWorker?.close()]);
   process.exit(0);
 }
 
