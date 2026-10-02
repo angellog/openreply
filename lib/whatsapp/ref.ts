@@ -53,3 +53,32 @@ export function buildWhatsAppHandoffUrl({
   const text = `${message?.trim() || "Hi! I saw your post"} ${formatRef(slug)}`;
   return `https://wa.me/${normalizeWhatsAppPhone(phone)}?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * A campaign's tracked-link slug only exists once the campaign is saved, so
+ * the builder can't bake it into the wa.me URL. It stores this placeholder
+ * instead, and the /r/<slug> redirect swaps in the real slug at click time.
+ */
+export const REF_PLACEHOLDER = "{ref}";
+
+/** wa.me destination for the campaign builder, with the ref still a placeholder. */
+export function buildWhatsAppHandoffTemplate({
+  phone,
+  message,
+}: {
+  phone: string;
+  message?: string;
+}) {
+  return buildWhatsAppHandoffUrl({ phone, slug: REF_PLACEHOLDER, message });
+}
+
+/** Replaces the ref placeholder (raw or URL-encoded) with the real slug. */
+export function resolveRefPlaceholder(url: string, slug: string) {
+  return url
+    .replaceAll(REF_PLACEHOLDER, encodeURIComponent(slug))
+    .replace(/%7Bref%7D/gi, encodeURIComponent(slug));
+}
+
+export function isWhatsAppHandoffUrl(url: string) {
+  return /^https:\/\/wa\.me\/\d+/.test(url);
+}

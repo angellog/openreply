@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { getRequestIp, hashClickIp } from "@/lib/tracking/server";
+import { resolveRefPlaceholder } from "@/lib/whatsapp/ref";
 
 type RedirectRouteProps = {
   params: Promise<{ slug: string }>;
@@ -39,5 +40,10 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
     },
   });
 
-  return NextResponse.redirect(trackedLink.destinationUrl, { status: 302 });
+  // WhatsApp handoff links carry a {ref} placeholder until click time, because
+  // the slug doesn't exist yet when the campaign is being built.
+  return NextResponse.redirect(
+    resolveRefPlaceholder(trackedLink.destinationUrl, slug),
+    { status: 302 }
+  );
 }
