@@ -105,3 +105,15 @@ describe("ref placeholder", () => {
     expect(isWhatsAppHandoffUrl(url)).toBe(false);
   });
 });
+
+describe("inbound sender name", () => {
+  it("prefers contact.pushName, the field whatsapp-web.js actually sends", async () => {
+    const { pickDisplayName } = await import("@/lib/whatsapp/inbound");
+    expect(pickDisplayName({ contact: { pushName: "Maya" } })).toBe("Maya");
+    expect(pickDisplayName({ contact: { pushname: "Maya" } })).toBe("Maya");
+    expect(pickDisplayName({ pushName: "Maya" })).toBe("Maya");
+    expect(pickDisplayName({ notifyName: "Maya" })).toBe("Maya");
+    expect(pickDisplayName({})).toBeNull();
+    expect(pickDisplayName({ contact: { pushName: "  " } })).toBeNull();
+  });
+});

@@ -27,7 +27,22 @@ export interface InboundWhatsAppMessage {
   isGroup?: boolean;
   isStatusBroadcast?: boolean;
   senderPhone?: string | null;
-  contact?: { name?: string | null; pushname?: string | null } | null;
+  /** whatsapp-web.js maps the sender's push name to contact.pushName (capital N). */
+  contact?: { name?: string | null; pushName?: string | null; pushname?: string | null } | null;
+  pushName?: string | null;
+  notifyName?: string | null;
+}
+
+/** The sender's display name, across the field names the engines use. */
+export function pickDisplayName(message: InboundWhatsAppMessage): string | null {
+  return (
+    message.contact?.pushName?.trim() ||
+    message.contact?.name?.trim() ||
+    message.contact?.pushname?.trim() ||
+    message.pushName?.trim() ||
+    message.notifyName?.trim() ||
+    null
+  );
 }
 
 export type InboundResult =
@@ -82,8 +97,7 @@ export async function handleInboundWhatsAppMessage(
 
   const workspaceId = trackedLink?.workspaceId ?? existingLead!.workspaceId;
   const now = new Date();
-  const displayName =
-    message.contact?.name?.trim() || message.contact?.pushname?.trim() || null;
+  const displayName = pickDisplayName(message);
 
   const lead = await prisma.whatsAppLead.upsert({
     where: { workspaceId_chatId: { workspaceId, chatId } },
