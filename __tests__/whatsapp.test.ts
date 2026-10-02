@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWhatsAppHandoffTemplate,
   buildWhatsAppHandoffUrl,
   chatIdToPhone,
   extractRefSlug,
   formatRef,
+  isWhatsAppHandoffUrl,
   normalizeWhatsAppPhone,
+  resolveRefPlaceholder,
   toChatId,
 } from "@/lib/whatsapp/ref";
 import {
@@ -75,5 +78,30 @@ describe("openwa webhook signatures", () => {
     expect(verifyOpenWaSignature(body, null, secret)).toBe(false);
     expect(verifyOpenWaSignature(body, signature, undefined)).toBe(false);
     expect(verifyOpenWaSignature(body, "sha256=short", secret)).toBe(false);
+  });
+});
+
+describe("ref placeholder", () => {
+  it("builds a template the campaign API will accept as a URL", () => {
+    const template = buildWhatsAppHandoffTemplate({ phone: "+256700123456" });
+    expect(() => new URL(template)).not.toThrow();
+    expect(isWhatsAppHandoffUrl(template)).toBe(true);
+    expect(template).toContain("%7Bref%7D");
+  });
+
+  it("resolves the placeholder so the reply carries the real slug", () => {
+    const template = buildWhatsAppHandoffTemplate({
+      phone: "256700123456",
+      message: "I want these",
+    });
+    const resolved = resolveRefPlaceholder(template, "aB3_x9Zk2q");
+    expect(resolved).not.toContain("%7Bref%7D");
+    expect(extractRefSlug(decodeURIComponent(resolved))).toBe("aB3_x9Zk2q");
+  });
+
+  it("leaves ordinary links untouched", () => {
+    const url = "https://feetbitsneakers.com/shop";
+    expect(resolveRefPlaceholder(url, "slug1234")).toBe(url);
+    expect(isWhatsAppHandoffUrl(url)).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
 import {
   handleInboundWhatsAppMessage,
   type InboundWhatsAppMessage,
@@ -46,6 +47,33 @@ export async function POST(request: NextRequest) {
       sessionId?: string;
     };
   };
+
+  // A number dropping off (logged out on the phone, banned, or the linked
+  // device expiring) is otherwise silent until customers stop getting replies.
+  if (envelope.event?.startsWith("session.")) {
+    const status = (envelope.data as { status?: string } | undefined)?.status;
+    if (
+      envelope.event === "session.disconnected" ||
+      status === "disconnected" ||
+      status === "failed"
+    ) {
+      await prisma.operationalEvent
+        .create({
+          data: {
+            source: "SYSTEM",
+            level: "WARNING",
+            message: "WhatsApp number disconnected",
+            payload: {
+              event: envelope.event,
+              sessionId: envelope.sessionId ?? envelope.data?.sessionId ?? null,
+              status: status ?? null,
+            },
+          },
+        })
+        .catch(() => undefined);
+    }
+    return NextResponse.json({ success: true, handled: envelope.event });
+  }
 
   if (envelope.event && envelope.event !== "message.received") {
     return NextResponse.json({ success: true, ignored: envelope.event });

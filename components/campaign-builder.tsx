@@ -23,6 +23,7 @@ import {
   IMPORT_ACCOUNT_KEY,
   type ImportRow,
 } from "@/lib/import-queue";
+import WhatsAppLinkPicker from "@/components/whatsapp-link-picker";
 
 type TriggerScope = "specific" | "any" | "next";
 type MatchMode = "specific" | "any";
@@ -883,6 +884,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onBlur={ensureLinkToken}
                   placeholder="https://yourlink.com/offer"
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                />
+                <WhatsAppLinkPicker
+                  currentUrl={trackedDestinationUrl}
+                  onPick={setTrackedDestinationUrl}
                 />
                 <input
                   value={linkButtonLabel}

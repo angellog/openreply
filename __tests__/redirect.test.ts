@@ -22,6 +22,27 @@ beforeEach(() => {
 });
 
 describe("tracked link redirect route", () => {
+  it("fills the WhatsApp ref placeholder with the link's slug", async () => {
+    mockPrisma.trackedLink.findUnique.mockResolvedValue({
+      id: "link_wa",
+      workspaceId: "workspace_123",
+      automationId: "automation_123",
+      destinationUrl:
+        "https://wa.me/256700123456?text=Hi!%20I%20saw%20your%20post%20(ref%3A%20%7Bref%7D)",
+      automation: { instagramAccountId: "ig_123" },
+    });
+
+    const response = await GET(
+      new Request("https://app.test/r/aB3_x9Zk2q") as never,
+      { params: Promise.resolve({ slug: "aB3_x9Zk2q" }) }
+    );
+
+    const location = response.headers.get("location") ?? "";
+    expect(location).toContain("wa.me/256700123456");
+    expect(decodeURIComponent(location)).toContain("(ref: aB3_x9Zk2q)");
+    expect(location).not.toContain("%7Bref%7D");
+  });
+
   it("logs a workspace-isolated click and redirects to the destination", async () => {
     mockPrisma.trackedLink.findUnique.mockResolvedValue({
       id: "link_123",
