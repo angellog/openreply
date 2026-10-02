@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/meta/webhook";
 import { MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
+import { relayToAgent } from "@/lib/agent-relay";
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
 
@@ -66,6 +67,18 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Forward the verified event to an external agent, if one is configured.
+  // Runs after the response so it can never slow down or fail Meta's delivery.
+  after(() =>
+    relayToAgent(rawBody, payload, {
+      onError: (message) =>
+        prisma.operationalEvent
+          .create({ data: { source: "SYSTEM", level: "WARNING", message } })
+          .then(() => undefined)
+          .catch(() => undefined),
+    })
+  );
 
   const webhookEvent = await prisma.webhookEvent.create({
     data: {
