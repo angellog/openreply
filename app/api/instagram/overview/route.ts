@@ -6,6 +6,7 @@ import {
   getAllUserMedia,
   getMediaInsights,
   PermissionError,
+  TokenExpiredError,
   type InstagramMedia,
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
@@ -248,6 +249,34 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
+    // Meta invalidates a token when the account's password changes or it
+    // flags a security event. The token looks valid by date, so the only
+    // signal is this error — name the account instead of failing blank,
+    // because the fix is reconnecting that specific one.
+    if (err instanceof TokenExpiredError) {
+      await prisma.operationalEvent
+        .create({
+          data: {
+            workspaceId,
+            source: "SYSTEM",
+            level: "ERROR",
+            message: `Instagram session expired for @${account.username}`,
+            payload: { username: account.username, reason: err.message },
+          },
+        })
+        .catch(() => undefined);
+
+      return NextResponse.json(
+        {
+          success: false,
+          code: "TOKEN_EXPIRED",
+          account: account.username,
+          error: `Instagram session for @${account.username} expired. Reconnect it in Settings, then reload this page.`,
+        },
+        { status: 409 }
+      );
+    }
+
     console.error("[Instagram Overview] Error:", err);
     return NextResponse.json(
       { success: false, error: "Failed to load Instagram overview" },
