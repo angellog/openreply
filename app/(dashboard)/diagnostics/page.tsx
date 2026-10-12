@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import StatusBadge from "@/components/status-badge";
 
 interface DiagnosticsData {
+  accountsNeedingReconnect: { username: string; failedAt: string }[];
   queueCounts: Record<string, number>;
   workerHealth: {
     healthy: boolean;
@@ -167,6 +168,25 @@ export default function DiagnosticsPage() {
           </div>
         ))}
       </div>
+
+      {(data?.accountsNeedingReconnect?.length ?? 0) > 0 && (
+        <Section title="Accounts Needing Reconnect">
+          <ul className="divide-y divide-border">
+            {(data?.accountsNeedingReconnect ?? []).map((a) => (
+              <li key={a.username} className="py-3 text-sm">
+                <span className="font-semibold text-error">@{a.username}</span>
+                <span className="text-muted">
+                  {" "}
+                  — Instagram session expired{" "}
+                  {new Date(a.failedAt).toLocaleString()}. DMs and comment
+                  sweeps for this account fail until it is reconnected in
+                  Settings.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section title="Recent Worker Alerts">
         {data?.workerAlerts.length ? (

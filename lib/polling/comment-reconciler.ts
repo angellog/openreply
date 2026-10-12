@@ -28,6 +28,7 @@
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import {
+  TokenExpiredError,
   getRecentMediaComments,
   getUserMedia,
   MetaApiError,
@@ -47,11 +48,15 @@ const RECENT_MEDIA_LIMIT = 10;
 
 interface SweepStat {
   campaign: string;
+  /** The account this campaign posts as — an expired token is per-account. */
+  username: string;
   keywords: string;
   matched: number;
   alreadyReplied: number;
   enqueued: number;
   errors: string[];
+  /** Meta rejected the account's token; sweeping cannot work until reconnect. */
+  authFailed?: boolean;
 }
 
 function errMessage(error: unknown): string {
@@ -92,6 +97,7 @@ export async function reconcileComments(): Promise<void> {
     const stat = await sweepCampaign(automation, sinceMs, tokenCache).catch(
       (error): SweepStat => ({
         campaign: automation.name,
+        username: automation.instagramAccount?.username ?? "unknown",
         keywords: automation.keywords.join(","),
         matched: 0,
         alreadyReplied: 0,
@@ -126,6 +132,7 @@ async function sweepCampaign(
   const account = automation.instagramAccount;
   const stat: SweepStat = {
     campaign: automation.name,
+    username: account.username,
     keywords: automation.matchAnyWord
       ? "(any word)"
       : automation.keywords.join(","),
@@ -160,6 +167,7 @@ async function sweepCampaign(
       const media = await getUserMedia(accessToken, RECENT_MEDIA_LIMIT);
       mediaIds.push(...media.map((m) => m.id));
     } catch (error) {
+      if (error instanceof TokenExpiredError) stat.authFailed = true;
       stat.errors.push(`Media list: ${errMessage(error)}`);
     }
   }
@@ -172,6 +180,7 @@ async function sweepCampaign(
     try {
       comments = await getRecentMediaComments(accessToken, mediaId, sinceMs);
     } catch (error) {
+      if (error instanceof TokenExpiredError) stat.authFailed = true;
       stat.errors.push(`Comments ${mediaId}: ${errMessage(error)}`);
       continue;
     }
@@ -252,6 +261,36 @@ async function recordSweep(
 ): Promise<void> {
   // Only log when something happened or something went wrong.
   if (stat.enqueued === 0 && stat.errors.length === 0) return;
+
+  // A dead token fails every sweep, which buried the one event that mattered
+  // under 288 identical warnings a day. Escalate it, name the account, and say
+  // it at most once an hour.
+  if (stat.authFailed) {
+    const message = `Instagram session expired for @${stat.username} — reconnect it in Settings`;
+    const recent = await prisma.operationalEvent.findFirst({
+      where: {
+        workspaceId,
+        level: "ERROR",
+        message,
+        createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (!recent) {
+      await prisma.operationalEvent
+        .create({
+          data: {
+            workspaceId,
+            source: "SYSTEM",
+            level: "ERROR",
+            message,
+            payload: { ...stat },
+          },
+        })
+        .catch(() => {});
+    }
+    return;
+  }
 
   await prisma.operationalEvent
     .create({
