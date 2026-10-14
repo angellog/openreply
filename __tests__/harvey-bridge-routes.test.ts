@@ -9,6 +9,7 @@ const { mocks } = vi.hoisted(() => ({
     command: { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     agent: { update: vi.fn() },
     trackedLink: { create: vi.fn() },
+    transaction: vi.fn(),
   },
 }));
 
@@ -17,6 +18,7 @@ vi.mock("@/lib/harvey/auth", () => ({
 }));
 vi.mock("@/lib/db/client", () => ({
   prisma: {
+    $transaction: mocks.transaction,
     harveyCompany: mocks.company,
     harveyProspect: mocks.prospect,
     harveyEmail: mocks.email,
@@ -47,6 +49,14 @@ function signedRequest(url: string, body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The route batches its writes, so the mock has to actually run the batch
+  // for the per-write assertions below to mean anything.
+  mocks.transaction.mockImplementation((operations: Promise<unknown>[]) =>
+    Promise.all(operations)
+  );
+  mocks.company.upsert.mockResolvedValue({});
+  mocks.prospect.upsert.mockResolvedValue({});
+  mocks.email.upsert.mockResolvedValue({});
   mocks.company.findMany.mockResolvedValue([]);
   mocks.prospect.findMany.mockResolvedValue([]);
   mocks.command.findMany.mockResolvedValue([]);
@@ -204,6 +214,40 @@ describe("POST /api/harvey/v1/sync", () => {
     const where = mocks.command.findMany.mock.calls[0][0].where;
     expect(where.ackedAt).toBeNull();
     expect(where.expiresAt.gt).toBeInstanceOf(Date);
+  });
+
+  it("batches its writes instead of awaiting each row", async () => {
+    // 200 rows per table against Postgres in another region is seconds of
+    // round trips if each one is awaited separately — long enough to risk the
+    // function's own timeout. One batch per group, and emails share with acks.
+    await sync(
+      signedRequest("https://app.test/api/harvey/v1/sync", {
+        companies: Array.from({ length: 50 }, (_, i) => ({ harveyId: `c${i}`, name: `Co ${i}` })),
+        prospects: Array.from({ length: 50 }, (_, i) => ({
+          harveyId: `p${i}`,
+          email: `p${i}@example.test`,
+        })),
+        emails: Array.from({ length: 50 }, (_, i) => ({
+          harveyId: `o${i}`,
+          toEmail: `p${i}@example.test`,
+        })),
+        acks: [{ commandId: "cmd_1", result: "approved" }],
+      })
+    );
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(3);
+    expect(mocks.transaction.mock.calls[0][0]).toHaveLength(50);
+    expect(mocks.transaction.mock.calls[1][0]).toHaveLength(50);
+    // 50 emails + 1 ack
+    expect(mocks.transaction.mock.calls[2][0]).toHaveLength(51);
+  });
+
+  it("writes nothing and opens no transaction for an empty heartbeat", async () => {
+    await sync(signedRequest("https://app.test/api/harvey/v1/sync", {}));
+
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    // The heartbeat still counts as the agent being alive.
+    expect(mocks.agent.update).toHaveBeenCalled();
   });
 
   it("records the reported runtime so diagnostics can show it", async () => {

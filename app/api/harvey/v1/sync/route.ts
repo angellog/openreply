@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   const workspaceId = agent.workspaceId;
 
   // ── 1. Record what Harvey learned ────────────────────────────────────────
-  for (const company of companies ?? []) {
+  const companyWrites = (companies ?? []).map((company) => {
     const data = {
       name: company.name,
       domain: company.domain ?? null,
@@ -65,12 +65,13 @@ export async function POST(request: NextRequest) {
       location: company.location ?? null,
       sourceUrl: company.sourceUrl ?? null,
     };
-    await prisma.harveyCompany.upsert({
+    return prisma.harveyCompany.upsert({
       where: { agentId_harveyId: { agentId: agent.id, harveyId: company.harveyId } },
       create: { workspaceId, agentId: agent.id, harveyId: company.harveyId, ...data },
       update: data,
     });
-  }
+  });
+  if (companyWrites.length) await prisma.$transaction(companyWrites);
 
   // Harvey references its own company ids; map them to local rows once.
   const companyIdByHarveyId = new Map<string, string>();
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     for (const row of rows) companyIdByHarveyId.set(row.harveyId, row.id);
   }
 
-  for (const prospect of prospects ?? []) {
+  const prospectWrites = (prospects ?? []).map((prospect) => {
     const data = {
       companyId: prospect.companyHarveyId
         ? companyIdByHarveyId.get(prospect.companyHarveyId) ?? null
@@ -99,12 +100,13 @@ export async function POST(request: NextRequest) {
       score: prospect.score ?? null,
       personalizationNotes: prospect.personalizationNotes ?? null,
     };
-    await prisma.harveyProspect.upsert({
+    return prisma.harveyProspect.upsert({
       where: { agentId_harveyId: { agentId: agent.id, harveyId: prospect.harveyId } },
       create: { workspaceId, agentId: agent.id, harveyId: prospect.harveyId, ...data },
       update: data,
     });
-  }
+  });
+  if (prospectWrites.length) await prisma.$transaction(prospectWrites);
 
   const prospectIdByHarveyId = new Map<string, string>();
   const referencedProspectIds = [
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
     for (const row of rows) prospectIdByHarveyId.set(row.harveyId, row.id);
   }
 
-  for (const email of emails ?? []) {
+  const emailWrites = (emails ?? []).map((email) => {
     const data = {
       prospectId: email.prospectHarveyId
         ? prospectIdByHarveyId.get(email.prospectHarveyId) ?? null
@@ -134,24 +136,37 @@ export async function POST(request: NextRequest) {
       sentAt: email.sentAt ? new Date(email.sentAt) : null,
       error: email.error ?? null,
     };
-    await prisma.harveyEmail.upsert({
+    return prisma.harveyEmail.upsert({
       where: { agentId_harveyId: { agentId: agent.id, harveyId: email.harveyId } },
       create: { workspaceId, agentId: agent.id, harveyId: email.harveyId, ...data },
       update: data,
     });
-  }
+  });
 
   // ── 2. Close out the commands Harvey already applied ─────────────────────
-  let acked = 0;
-  for (const ack of acks ?? []) {
-    // Scoped to this node, so one workspace's Harvey cannot ack another's, and
-    // already-acked commands are left alone (first ack wins).
-    const result = await prisma.harveyCommand.updateMany({
+  //
+  // Scoped to this agent, so one workspace's Harvey cannot ack another's, and
+  // already-acked commands are left alone — the first ack wins.
+  const ackedAt = new Date();
+  const ackWrites = (acks ?? []).map((ack) =>
+    prisma.harveyCommand.updateMany({
       where: { id: ack.commandId, agentId: agent.id, ackedAt: null },
-      data: { ackedAt: new Date(), result: ack.result },
-    });
-    acked += result.count;
-  }
+      data: { ackedAt, result: ack.result },
+    })
+  );
+
+  // Emails and acks share a batch: neither depends on the other, so there is
+  // no reason to pay for two round trips.
+  const writeResults =
+    emailWrites.length + ackWrites.length > 0
+      ? await prisma.$transaction([...emailWrites, ...ackWrites])
+      : [];
+  const acked = writeResults
+    .slice(emailWrites.length)
+    .reduce(
+      (total, result) => total + ((result as { count?: number }).count ?? 0),
+      0
+    );
 
   // ── 3. Hand over what the operator decided ───────────────────────────────
   const now = new Date();
