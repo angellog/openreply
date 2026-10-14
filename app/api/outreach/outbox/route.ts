@@ -32,11 +32,16 @@ export async function GET(request: NextRequest) {
       workspaceId: context.workspaceId,
       ...(status === "pending" ? { status: "PENDING_REVIEW" } : {}),
     },
+    // Postgres orders an enum by its declared order, and HarveyEmailStatus
+    // declares PENDING_REVIEW first. That is load-bearing, not luck: it keeps
+    // what needs a decision at the top of the 100 even once hundreds have
+    // been sent. Reordering that enum would quietly bury the approvals.
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 100,
     select: {
       id: true,
       harveyId: true,
+      agentId: true,
       subject: true,
       body: true,
       toEmail: true,
@@ -70,19 +75,33 @@ export async function GET(request: NextRequest) {
       expiresAt: { gt: now },
       kind: { in: ["APPROVE_EMAIL", "REJECT_EMAIL"] },
     },
-    select: { kind: true, targetHarveyId: true, createdAt: true, deliveredAt: true },
+    select: {
+      kind: true,
+      agentId: true,
+      targetHarveyId: true,
+      createdAt: true,
+      deliveredAt: true,
+    },
   });
-  const pendingByHarveyId = new Map(
+  // Keyed by agent as well as by Harvey's id. Harvey's ids are only unique
+  // within one instance (uuid4 truncated to 12 hex chars), and a workspace
+  // runs one agent per brand — so keying on the id alone would let one
+  // brand's decision surface on another brand's email.
+  const decisionKey = (agentId: string, harveyId: string) => `${agentId}:${harveyId}`;
+  const pendingByEmail = new Map(
     inFlight
       .filter((command) => command.targetHarveyId)
-      .map((command) => [command.targetHarveyId as string, command])
+      .map((command) => [
+        decisionKey(command.agentId, command.targetHarveyId as string),
+        command,
+      ])
   );
 
   return NextResponse.json({
     success: true,
     data: {
       emails: emails.map((email) => {
-        const pending = pendingByHarveyId.get(email.harveyId);
+        const pending = pendingByEmail.get(decisionKey(email.agentId, email.harveyId));
         return {
           ...email,
           stale: isEmailStale(email.status, email.createdAt, now),
@@ -145,6 +164,15 @@ export async function POST(request: NextRequest) {
 
   // One decision per email at a time. Tapping twice on a slow connection must
   // not queue two commands.
+  //
+  // This is a find-then-create, so two truly simultaneous taps can both get
+  // past it. That is left alone deliberately rather than closed with a
+  // serializable transaction or a partial unique index: the thing on the far
+  // end is idempotent by construction. Harvey's approve_outbox only moves a
+  // row that is still pending_review, so the second command reports
+  // "already_approved" and nothing is sent twice. The cost of the race is a
+  // spare row in a queue; the cost of the fix would be retry handling on the
+  // one request the operator cares about.
   const existing = await prisma.harveyCommand.findFirst({
     where: {
       agentId: email.agentId,
