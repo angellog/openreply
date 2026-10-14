@@ -182,3 +182,122 @@ Baseline before this work: 175 tests / 18 files green. After: **194 / 19 green.*
 5. **Harvey upstream is young** (0.3.0, repo days old at pin time). The fork
    stays a thin addition in `harvey/integrations/` so upstream merges stay
    cheap.
+
+---
+
+## 8. Reconciliation with the architecture review
+
+The plan in `harvey-fusion-plan.md` was produced independently and reviewed
+against what had already been built. It converged on the same architecture
+(Harvey local, OpenReply as control plane, outbound-only traffic, the tracked
+link as the attribution join), which is reassuring, and it caught three things
+worth changing.
+
+### Taken from the review
+
+1. **One agent per brand, not one per workspace.** The original schema had
+   `@@unique([workspaceId])` on the agent. Angelo runs two outreach motions —
+   sneaker wholesale and advisory — with different senders, offers and
+   handoffs. They are different agents sharing one workspace, so the
+   constraint became `@@unique([workspaceId, name])`. This was a genuine
+   modelling error, not a preference.
+2. **Handoff destinations belong on the agent.** Originally the mint request
+   carried the phone number. Holding it on the agent instead means a stolen
+   Harvey secret cannot repoint a link on our own domain at an arbitrary
+   number, and it is what makes "WhatsApp for FeetBit, Cal.com for Vantik"
+   configuration rather than code.
+3. **A real bug.** `app/api/dashboard/stats/route.ts` counts every `LinkClick`
+   in the workspace. With no account selected its filter is empty, so
+   cold-email clicks would have silently inflated the Instagram dashboard's
+   click metric. Fixed with `automationId: { not: null }`, and the same filter
+   added to the funnel's `groupBy` to make the exclusion explicit rather than
+   incidental.
+
+Also adopted: `/api/harvey/v1/*` for agent traffic and `/api/outreach/*` for
+operator traffic (versioning the wire protocol, and keeping the two auth modes
+out of one path prefix); `secretPrefix` so the operator can identify a secret
+without it being retrievable; `HarveyAgentStatus` so an agent can be revoked
+without deleting its history; a dedicated `HARVEY` value on
+`OperationalEventSource`; and `EDIT_EMAIL` / `APPROVE_ALL` commands.
+
+### Kept against the review, with reasons
+
+1. **`HarveyCompany` stays a table.** The review denormalised company fields
+   onto the prospect. Harvey's own model is company-first — its `observations`
+   hang off a company id — and "which boutiques do we know, and who have we
+   reached at each" is the question B2B outreach exists to answer. A real
+   table answers it without string-matching company names.
+2. **Five outbox statuses, not six.** The review added `REJECTED`. Harvey has
+   no such status; a rejection is its `cancelled` with a reason. Inventing a
+   sixth state in a mirror is how a mirror starts lying. The reason goes in
+   `error`, which Harvey already displays.
+3. **Timestamps, not a command-status enum.** `deliveredAt` / `ackedAt` /
+   `expiresAt` carry strictly more information than `PENDING | DELIVERED |
+   ACKED | EXPIRED` and cannot contradict each other the way a status column
+   and its timestamps can.
+4. **One fused sync endpoint** instead of separate heartbeat / sync /
+   commands-pull / commands-ack calls. Push, ack and collect happen in one
+   request per cycle, in that order, so Harvey's work is recorded and its old
+   orders closed out before new ones are handed over — and a heartbeat is one
+   round trip rather than four. All fields are optional, so an
+   acks-only or empty call is a valid heartbeat.
+5. **No `python@3.13` install.** The review reported no Python 3.11-3.13 on
+   this machine. There is: `python3.12` is 3.12.12. Verified directly.
+
+## 9. Two bugs found in my own work, both by writing the test
+
+1. **Mutable class attribute.** `OpenReplyBridge._pending_acks` was declared at
+   class level, so every bridge in a process would have shared one list and
+   acked each other's commands. Moved into `__init__`.
+2. **Mixed timestamp spellings, the subtle one.** Harvey's database contains
+   both `2026-10-15 09:00:00` (SQLite `CURRENT_TIMESTAMP`) and
+   `2026-10-15T09:00:00.123` (Python `isoformat()`). Compared as strings, `T`
+   (0x54) sorts above a space (0x20) — so an ISO-stamped row at midnight looks
+   *newer* than a space-stamped row at 23:59 the same day. A cursor taken from
+   the first would have skipped the second permanently, and the rows would
+   simply never have synced. `get_rows_updated_since` now normalises the
+   separator on both sides of the comparison, and there is a test pinning it.
+
+The same discipline caught two wrong *tests* rather than wrong code: an empty
+header is "missing" rather than "malformed", and a fake `encryptToken` that
+echoed its input made the "secret is never stored in the clear" assertion
+vacuous.
+
+## 10. What is built, and what is not
+
+Shipped and green — 244 tests across 23 files in OpenReply, 46 in Harvey,
+typecheck and lint clean, production build passing:
+
+| Piece | Where |
+|---|---|
+| Request signing, both languages, pinned by a shared golden vector | `lib/harvey/signature.ts`, `harvey/integrations/openreply.py` |
+| Agent authentication, revocation, deduped failure logging | `lib/harvey/auth.ts` |
+| The sync endpoint: push, ack, collect in one round trip | `app/api/harvey/v1/sync/route.ts` |
+| Link minting, idempotent per email, destination from the agent | `app/api/harvey/v1/links/route.ts` |
+| Pairing, rotation, revocation, handoff config | `app/api/outreach/agents/route.ts` |
+| The approvals desk and its decision queue | `app/api/outreach/outbox/route.ts`, `app/(dashboard)/outreach/page.tsx` |
+| Harvey's bridge loop, body rewriting, command application | `harvey/integrations/openreply.py` |
+| Incremental reads with a format-safe cursor | `harvey/state.py` |
+| Operator guide | `docs/harvey.md` |
+
+Deliberately not built yet, in the order I would do it:
+
+1. **`POST /api/harvey/v1/events` — the reverse flow.** Harvey currently
+   pushes and receives decisions, but learns nothing from what happens after a
+   send. This endpoint would let it pull `LINK_CLICKED`, `WHATSAPP_STARTED`
+   and `WHATSAPP_MESSAGE_IN` as `observations`, which gives it two things it
+   cannot get elsewhere: stop-on-reply when a prospect answers on WhatsApp
+   instead of email, and Scout scoring a business that is already engaging.
+   Needs an `OutreachEvent` table with a monotonic cursor and five new
+   `signal_codes` rows seeded as confirmed (Harvey's trigger rejects unknown
+   codes).
+2. **Timeline per prospect.** Merging emails, clicks and WhatsApp messages into
+   one chronology. The data is already all there; this is a read model.
+3. **Lead handoff from inbound to outbound.** Not "email the Instagram
+   commenter" — see §2.7, we never have their address — but seeding Harvey's
+   DISCOVER stage from a business that engaged on Instagram.
+4. **Borrowing Harvey's brain** (§2.8) for drafting Instagram replies.
+
+Phase 1 is the whole loop end to end: Harvey writes, you approve from your
+phone, Harvey sends with a tracked link, the prospect lands in WhatsApp
+attributed. Each item above makes it smarter; none is needed for it to work.
