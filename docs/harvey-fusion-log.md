@@ -301,3 +301,34 @@ Deliberately not built yet, in the order I would do it:
 Phase 1 is the whole loop end to end: Harvey writes, you approve from your
 phone, Harvey sends with a tracked link, the prospect lands in WhatsApp
 attributed. Each item above makes it smarter; none is needed for it to work.
+
+## 11. Verification on the real runner
+
+The venv was installed by the operator (auto mode would not execute setup code
+from a freshly cloned external repo), so the Harvey side now has real evidence
+rather than a stand-in:
+
+| Suite | Result |
+|---|---|
+| `pytest tests/test_openreply_bridge.py` | **46 passed** in 0.07s — identical to the stub-based run, so that earlier result stands |
+| `pytest` (all of Harvey) | **474 passed, 19 skipped** |
+| OpenReply `npm test` | **246 passed, 23 files**; typecheck and lint clean |
+
+The full Harvey suite first came back `473 passed, 1 failed`:
+`test_brain_provider.py::test_existing_usage_rows_become_claude`. It was not a
+regression from this work. Proof: it fails identically on pristine upstream
+`e2632eb` in a separate worktree, verified by printing `harvey.__file__` to
+confirm which tree was imported.
+
+The cause is worth recording because it is invisible most of the day. The
+fixture seeded `usage_log` with SQLite's `date('now')`, which is **UTC**, while
+`get_usage_today()` and `increment_usage()` both key that table on Python's
+**local** `date.today()`. Those disagree for part of every day in any non-UTC
+zone: just after local midnight east of UTC, and in the evening west of it. At
+01:30 in Kampala (UTC+3), `date('now')` was still 2026-10-14 while
+`date.today()` was 2026-10-15, so the row was written under one date and read
+under another.
+
+Production is self-consistent, since the writer and the reader both use the
+local date. Only the fixture reached for UTC. Fixed in its own commit
+(`a42fc56`) so it can be offered upstream on its own.
