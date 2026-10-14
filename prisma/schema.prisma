@@ -65,12 +65,15 @@ model VerificationToken {
 }
 
 model Workspace {
-  id        String   @id @default(cuid())
-  name      String
-  ownerId   String
-  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  /// Brand segment of the public resource URL, /resources/<publicSlug>. Null
+  /// until the workspace publishes a resource hub.
+  publicSlug String?  @unique
+  ownerId    String
+  owner      User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   usagePeriodStart  DateTime @default(now())
   dmsSentThisPeriod Int      @default(0)
@@ -91,6 +94,8 @@ model Workspace {
   harveyProspects   HarveyProspect[]
   harveyEmails      HarveyEmail[]
   harveyCommands    HarveyCommand[]
+  resources         Resource[]
+  resourceLeads     ResourceLead[]
 
   @@index([ownerId])
 }
@@ -299,6 +304,7 @@ model TrackedLink {
   clicks        LinkClick[]
   whatsappLeads WhatsAppLead[]
   harveyEmails  HarveyEmail[]
+  resourceLeads ResourceLead[]
 
   @@index([workspaceId])
   @@index([automationId])
@@ -715,4 +721,109 @@ enum HarveyCommandKind {
   APPROVE_ALL
   PAUSE_SENDING
   RESUME_SENDING
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resource library
+//
+// A lead magnet hub: a public page per brand listing its resources, and a gate
+// per resource that asks for an email before handing over the link.
+//
+// This is where the outbound channel gets its fuel. An Instagram commenter
+// never gives up an email address, so there is no honest path from a comment to
+// a cold sequence. A resource gate is the one place a warm visitor hands over
+// the one thing Harvey needs, knowingly and in exchange for something.
+//
+// Which makes consent the whole design. An address given to get a checklist is
+// consent for that checklist, not for a three-email sequence. The tick, its
+// exact wording and its timestamp are all stored, and only a lead who opted in
+// is ever offered to Harvey.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Resource {
+  id             String  @id @default(cuid())
+  workspaceId    String
+  /// Last path segment of the public URL, /resources/<brand>/<slug>.
+  slug           String
+  title          String
+  /// One line under the title on the gate. The reason to hand over an address.
+  summary        String
+  /// Longer copy on the gate page. Markdown is not rendered; plain text only.
+  description    String?
+  /// Where the resource actually lives, usually a Drive link. Never shown
+  /// before an address is given, though a link that leaks is still a link that
+  /// works: this is a soft gate, like every other one on the web.
+  destinationUrl String
+  /// Short label on the hub card, e.g. "Checklist" or "Template".
+  kind           String?
+  /// Published resources are visible publicly. Everything starts unpublished so
+  /// a half-written gate is never live.
+  isPublished    Boolean @default(false)
+  position       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads     ResourceLead[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, isPublished])
+}
+
+/// One address, given once, for one resource.
+model ResourceLead {
+  id          String @id @default(cuid())
+  workspaceId String
+  resourceId  String
+
+  email String
+  name  String?
+
+  /// Did they tick the box agreeing to hear more. False is the default and the
+  /// unticked state: a resource is handed over either way, and only a true here
+  /// ever reaches the outbound agent.
+  consentMarketing Boolean   @default(false)
+  /// The exact sentence shown next to the box, stored verbatim. Consent is only
+  /// meaningful if you can say what was agreed to, and that wording will change
+  /// over time.
+  consentText      String?
+  consentedAt      DateTime?
+
+  /// The tracked link that brought them, when they arrived through one.
+  refSlug       String?
+  trackedLinkId String?
+
+  ipHash    String?
+  userAgent String?
+  referrer  String?
+
+  /// Whether the copy of the link we emailed actually arrived. A bounce is what
+  /// tells us an address is junk, which is why the link is emailed even though
+  /// the page also shows it.
+  deliveryStatus ResourceDeliveryStatus @default(PENDING)
+  deliveryError  String?
+
+  /// Set once the outbound agent has taken this lead as a prospect, so it is
+  /// offered exactly once.
+  exportedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  resource    Resource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  trackedLink TrackedLink? @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+
+  /// One row per address per resource. Asking again for the same thing is a
+  /// re-send, not a second lead.
+  @@unique([resourceId, email])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, consentMarketing, exportedAt])
+}
+
+enum ResourceDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
 }

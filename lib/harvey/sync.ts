@@ -86,6 +86,8 @@ export const harveySyncRequest = z.object({
     )
     .max(MAX_BATCH)
     .optional(),
+  /** Resource leads the agent has taken as prospects, by their OpenReply id. */
+  leadAcks: z.array(z.string().min(1).max(64)).max(MAX_BATCH).optional(),
   companies: z.array(harveyCompanyInput).max(MAX_BATCH).optional(),
   prospects: z.array(harveyProspectInput).max(MAX_BATCH).optional(),
   emails: z.array(harveyEmailInput).max(MAX_BATCH).optional(),
@@ -119,3 +121,21 @@ export function isEmailStale(
     now.getTime() - createdAt.getTime() > EMAIL_STALE_AFTER_MS
   );
 }
+
+/**
+ * A resource lead is only ever offered to the outbound agent when all three of
+ * these hold. Each one is doing work:
+ *
+ * - consentMarketing: they ticked the box. Without it the address was given for
+ *   one download and nothing else, and sending to it is spam whatever the law
+ *   in a given country says.
+ * - deliveryStatus SENT: the copy we emailed was accepted. An address that
+ *   failed is junk or mistyped, and feeding it to a cold sequence is how a
+ *   sending domain earns a bad reputation.
+ * - exportedAt null: offered exactly once.
+ */
+export const EXPORTABLE_LEAD_WHERE = {
+  consentMarketing: true,
+  deliveryStatus: "SENT",
+  exportedAt: null,
+} as const;

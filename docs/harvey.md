@@ -198,3 +198,81 @@ git checkout feat/openreply-bridge && git merge main
 ```
 
 Then `git pull` in each per-brand checkout.
+
+---
+
+## Where the addresses come from
+
+Harvey needs email addresses, and the honest ways to get them are narrower than
+they look. An Instagram commenter gives you a handle and maybe a WhatsApp
+number, never an address, so there is no route from a comment to a cold
+sequence. Discovery finds business addresses, which is cold outreach proper.
+
+The third way is the one people actually answer: give something away and ask for
+an address in exchange. That is what **Resources** is.
+
+### Setting it up
+
+1. **Outreach → Resources** in the dashboard. Set the public address once, e.g.
+   `vantik`. It appears in every link you ever share, so changing it later
+   breaks them.
+2. Add a resource. A Google Drive link is fine; the file does not have to live
+   here. Everything starts as a draft.
+3. Publish it. The hub goes live at `/resources/vantik` and each gate at
+   `/resources/vantik/<slug>`.
+4. Put the hub link in a bio, a Reel caption, or a tracked link from a campaign.
+   One link covers everything you have ever published.
+
+### What happens when someone claims one
+
+They type an address, optionally tick a box, and get the link **immediately** on
+the page. A copy is emailed at the same time. That combination is deliberate:
+showing it means nobody who gave a real address is left waiting on an inbox, and
+emailing it means a junk address fails, and a failed address is never used for
+anything else.
+
+### The consent rule, which is not negotiable
+
+An address given to get a checklist is consent for that checklist. Nothing more.
+
+A lead is offered to Harvey only when **all three** of these hold:
+
+| Condition | Why it is there |
+|---|---|
+| They ticked the box | Without it, the address was given for one download. Sending anyway is spam whatever the local law says. |
+| The email we sent was accepted | A failed address is junk or mistyped. Feeding it to a cold sequence is how a sending domain earns a bad reputation. |
+| It has not been exported before | Offered exactly once. |
+
+The box is **unticked by default and never required** — the resource is handed
+over either way. That is the only arrangement in which a tick means anything.
+The exact sentence shown is stored on the lead along with the timestamp, so the
+record can always say what was agreed to and when.
+
+Leads that qualify arrive in Harvey as prospects with
+`email_status = "verified"`, `source = "resource:<slug>"`, and a note saying
+which resource they took. Worth being precise about that label: the address was
+typed by its owner to receive something they wanted and a message to it was
+accepted for delivery. That is stronger than the pattern-guessed addresses
+Harvey normally works with and weaker than a mailbox probe. If one is wrong,
+Harvey's own bounce handling catches it and `max_bounce_rate` pauses sending.
+
+**Not yet wired:** Resend's bounce webhook. Today a send that Resend accepts and
+the recipient's server later rejects still counts as delivered here. Harvey
+catches it downstream, but flipping the lead to failed on a bounce would catch
+it sooner.
+
+### Previewing the pages locally
+
+There is no local database by default. To see the public pages on this machine:
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/initdb -D /tmp/orpg -U postgres --auth=trust --locale=C
+/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /tmp/orpg -o "-p 5433" -l /tmp/orpg/server.log start
+/opt/homebrew/opt/postgresql@16/bin/createdb -h 127.0.0.1 -p 5433 -U postgres openreply
+printf 'DATABASE_URL="postgresql://postgres@127.0.0.1:5433/openreply"\nNEXTAUTH_URL="http://localhost:3000"\nNEXTAUTH_SECRET="local-only"\n' > .env.local
+npx prisma migrate deploy && npm run dev
+```
+
+Then insert a workspace with a `publicSlug` and a published `Resource`, and open
+`/resources/<slug>`. Stop and delete the cluster with `pg_ctl -D /tmp/orpg stop`
+and `rm -rf /tmp/orpg`.

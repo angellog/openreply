@@ -9,6 +9,7 @@ const { mocks } = vi.hoisted(() => ({
     command: { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     agent: { update: vi.fn() },
     trackedLink: { create: vi.fn() },
+    lead: { findMany: vi.fn(), updateMany: vi.fn() },
     transaction: vi.fn(),
   },
 }));
@@ -25,6 +26,7 @@ vi.mock("@/lib/db/client", () => ({
     harveyCommand: mocks.command,
     harveyAgent: mocks.agent,
     trackedLink: mocks.trackedLink,
+    resourceLead: mocks.lead,
   },
 }));
 
@@ -60,6 +62,8 @@ beforeEach(() => {
   mocks.company.findMany.mockResolvedValue([]);
   mocks.prospect.findMany.mockResolvedValue([]);
   mocks.command.findMany.mockResolvedValue([]);
+  mocks.lead.findMany.mockResolvedValue([]);
+  mocks.lead.updateMany.mockResolvedValue({ count: 0 });
   mocks.command.updateMany.mockResolvedValue({ count: 0 });
   mocks.agent.update.mockResolvedValue({});
 });
@@ -248,6 +252,82 @@ describe("POST /api/harvey/v1/sync", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
     // The heartbeat still counts as the agent being alive.
     expect(mocks.agent.update).toHaveBeenCalled();
+  });
+
+  it("only ever offers a lead who consented, received our mail, and is new", async () => {
+    // The single most important query in this feature. Each clause is load
+    // bearing: no tick means the address was given for one download, a failed
+    // send means the address is junk, and an exported lead has been dealt with.
+    await sync(signedRequest("https://app.test/api/harvey/v1/sync", {}));
+
+    expect(mocks.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: "ws_1",
+          consentMarketing: true,
+          deliveryStatus: "SENT",
+          exportedAt: null,
+        },
+      })
+    );
+  });
+
+  it("hands over a consented lead with where it came from", async () => {
+    mocks.lead.findMany.mockResolvedValue([
+      {
+        id: "lead_1",
+        email: "amina@kampalakicks.ug",
+        name: "Amina Nakato",
+        consentedAt: new Date("2026-10-15T09:00:00.000Z"),
+        createdAt: new Date("2026-10-15T09:00:00.000Z"),
+        resource: { slug: "wholesale-checklist", title: "The Wholesale Checklist" },
+      },
+    ]);
+
+    const json = await (await sync(signedRequest("https://app.test/api/harvey/v1/sync", {}))).json();
+
+    expect(json.data.leads).toEqual([
+      {
+        id: "lead_1",
+        email: "amina@kampalakicks.ug",
+        name: "Amina Nakato",
+        source: "resource:wholesale-checklist",
+        resourceTitle: "The Wholesale Checklist",
+        consentedAt: "2026-10-15T09:00:00.000Z",
+        capturedAt: "2026-10-15T09:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("marks an acked lead exported once, scoped to the workspace", async () => {
+    mocks.lead.updateMany.mockResolvedValue({ count: 1 });
+
+    await sync(
+      signedRequest("https://app.test/api/harvey/v1/sync", { leadAcks: ["lead_1"] })
+    );
+
+    expect(mocks.lead.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // exportedAt: null means a replayed ack cannot rewrite the first one.
+        where: { id: "lead_1", workspaceId: "ws_1", exportedAt: null },
+      })
+    );
+  });
+
+  it("counts command acks without counting lead acks", async () => {
+    mocks.command.updateMany.mockResolvedValue({ count: 1 });
+    mocks.lead.updateMany.mockResolvedValue({ count: 1 });
+
+    const json = await (
+      await sync(
+        signedRequest("https://app.test/api/harvey/v1/sync", {
+          acks: [{ commandId: "cmd_1", result: "approved" }],
+          leadAcks: ["lead_1"],
+        })
+      )
+    ).json();
+
+    expect(json.data.counts.acked).toBe(1);
   });
 
   it("records the reported runtime so diagnostics can show it", async () => {

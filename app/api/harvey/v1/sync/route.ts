@@ -4,6 +4,7 @@ import { authenticateHarveyRequest } from "@/lib/harvey/auth";
 import {
   COMMAND_TTL_MS,
   EMAIL_STATUS_TO_DB,
+  EXPORTABLE_LEAD_WHERE,
   harveySyncRequest,
 } from "@/lib/harvey/sync";
 
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { runtime, acks, companies, prospects, emails } = parsed.data;
+  const { runtime, acks, leadAcks, companies, prospects, emails } = parsed.data;
   const workspaceId = agent.workspaceId;
 
   // ── 1. Record what Harvey learned ────────────────────────────────────────
@@ -155,14 +156,25 @@ export async function POST(request: NextRequest) {
     })
   );
 
+  // A lead the agent has taken is marked exported, so it is offered once and
+  // never again. Scoped to the workspace, and only moved from null, so a
+  // replayed ack cannot rewrite when it happened.
+  const exportedAt = new Date();
+  const leadAckWrites = (leadAcks ?? []).map((leadId) =>
+    prisma.resourceLead.updateMany({
+      where: { id: leadId, workspaceId, exportedAt: null },
+      data: { exportedAt },
+    })
+  );
+
   // Emails and acks share a batch: neither depends on the other, so there is
   // no reason to pay for two round trips.
   const writeResults =
-    emailWrites.length + ackWrites.length > 0
-      ? await prisma.$transaction([...emailWrites, ...ackWrites])
+    emailWrites.length + ackWrites.length + leadAckWrites.length > 0
+      ? await prisma.$transaction([...emailWrites, ...ackWrites, ...leadAckWrites])
       : [];
   const acked = writeResults
-    .slice(emailWrites.length)
+    .slice(emailWrites.length, emailWrites.length + ackWrites.length)
     .reduce(
       (total, result) => total + ((result as { count?: number }).count ?? 0),
       0
@@ -193,6 +205,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Resource leads: people who asked for something of ours and ticked the box
+  // agreeing to hear more. This is the only honest route from an inbound
+  // audience into outbound email, because an Instagram commenter never gives
+  // up an address.
+  const leads = await prisma.resourceLead.findMany({
+    where: { workspaceId, ...EXPORTABLE_LEAD_WHERE },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      consentedAt: true,
+      createdAt: true,
+      resource: { select: { slug: true, title: true } },
+    },
+  });
+
   await prisma.harveyAgent.update({
     where: { id: agent.id },
     data: {
@@ -217,6 +247,17 @@ export async function POST(request: NextRequest) {
         targetHarveyId: command.targetHarveyId,
         payload: command.payload,
         expiresAt: command.expiresAt.toISOString(),
+      })),
+      leads: leads.map((lead) => ({
+        id: lead.id,
+        email: lead.email,
+        name: lead.name,
+        // Where they came from, so the agent can write to someone who already
+        // knows the brand rather than opening cold.
+        source: `resource:${lead.resource.slug}`,
+        resourceTitle: lead.resource.title,
+        consentedAt: lead.consentedAt?.toISOString() ?? null,
+        capturedAt: lead.createdAt.toISOString(),
       })),
       serverTime: now.toISOString(),
       commandTtlSeconds: COMMAND_TTL_MS / 1000,
