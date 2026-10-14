@@ -225,6 +225,9 @@ export async function GET(request: NextRequest) {
   }
 
   for (const row of clickCounts) {
+    // A click on a link that isn't an Instagram campaign's (a Harvey cold
+    // email, say) has no automation to attribute to.
+    if (!row.automationId) continue;
     const item = analytics.get(row.automationId);
     if (item) item.clicks = row._count._all;
   }
