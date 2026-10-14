@@ -86,6 +86,11 @@ model Workspace {
   operationalEvents OperationalEvent[]
   whatsappLeads     WhatsAppLead[]
   whatsappMessages  WhatsAppMessage[]
+  harveyAgents      HarveyAgent[]
+  harveyCompanies   HarveyCompany[]
+  harveyProspects   HarveyProspect[]
+  harveyEmails      HarveyEmail[]
+  harveyCommands    HarveyCommand[]
 
   @@index([ownerId])
 }
@@ -293,6 +298,7 @@ model TrackedLink {
   automation    Automation?    @relation(fields: [automationId], references: [id], onDelete: Cascade)
   clicks        LinkClick[]
   whatsappLeads WhatsAppLead[]
+  harveyEmails  HarveyEmail[]
 
   @@index([workspaceId])
   @@index([automationId])
@@ -400,6 +406,7 @@ enum OperationalEventSource {
   TOKEN_REFRESH
   HEALTH
   SYSTEM
+  HARVEY
 }
 
 enum OperationalEventLevel {
@@ -465,4 +472,247 @@ model WhatsAppMessage {
 enum WhatsAppDirection {
   INBOUND
   OUTBOUND
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Harvey bridge
+//
+// Harvey is an autonomous outbound-email agent that runs on a machine the
+// operator controls, because its model backend is the operator's logged-in
+// Claude CLI rather than a metered API. It cannot run here. So this app is its
+// control plane: Harvey pushes what it learned and polls for what the operator
+// decided, which means no inbound port on the operator's network and nothing
+// to expose. The operator approves cold emails from a phone.
+//
+// Harvey's SQLite stays the source of truth for Harvey's own work. These tables
+// are a mirror, keyed by Harvey's ids so a replayed sync is a no-op.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One Harvey instance: one brand, one checkout, one SQLite file on the
+/// operator's machine. Several can share a workspace, which is the normal case
+/// here — sneaker wholesale and advisory outreach have different senders,
+/// different offers and different handoffs, so they are different agents even
+/// though one person reviews both.
+model HarveyAgent {
+  id          String            @id @default(cuid())
+  workspaceId String
+  /// Stable per-workspace name, e.g. "feetbit-wholesale" or "vantik".
+  name        String
+  status      HarveyAgentStatus @default(ACTIVE)
+
+  /// Shared HMAC secret, AES-256-GCM at rest via lib/meta/oauth.ts, the same
+  /// way Instagram tokens are stored. Verifying a signature needs the
+  /// plaintext, so a one-way hash is not an option here.
+  secretEncrypted String
+  /// First characters of the secret, so the operator can tell which secret a
+  /// machine holds without the secret being retrievable.
+  secretPrefix    String
+
+  /// Where this agent's tracked links send people. Held here rather than taken
+  /// from the mint request, so a compromised agent cannot point a link on this
+  /// domain at a number or site the operator never chose.
+  whatsappPhone         String?
+  whatsappMessage       String?
+  /// One-time auto-reply for chats arriving through this agent's links. Null
+  /// means stay silent and let a human answer.
+  whatsappGreeting      String?
+  /// Non-WhatsApp handoff, e.g. a Cal.com booking page for advisory outreach.
+  defaultDestinationUrl String?
+
+  /// Last request of any kind. Drives the "Harvey hasn't checked in" warning:
+  /// a laptop that slept for three days looks identical to a crashed one
+  /// unless this is on screen.
+  lastSeenAt    DateTime?
+  lastSyncAt    DateTime?
+  /// Harvey's reported version and brain provider, for the diagnostics page.
+  agentVersion  String?
+  brainProvider String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companies HarveyCompany[]
+  prospects HarveyProspect[]
+  emails    HarveyEmail[]
+  commands  HarveyCommand[]
+
+  /// Names are how the operator tells two agents apart, so they must be
+  /// unique within a workspace.
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+/// Revoking beats deleting: it stops the secret working immediately while
+/// keeping every prospect, email and attribution the agent produced.
+enum HarveyAgentStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// A business Harvey discovered. The B2B counterpart to an Instagram follower:
+/// a boutique, a gym, a reseller.
+///
+/// Kept as its own table rather than denormalised onto the prospect, because
+/// Harvey's own model is company-first — its observations hang off a company
+/// id — and "which boutiques do we know, and who have we reached at each" is
+/// the question this whole channel exists to answer.
+model HarveyCompany {
+  id          String   @id @default(cuid())
+  workspaceId String
+  agentId     String
+  /// Harvey's own row id. The idempotency key for every sync.
+  harveyId    String
+  name        String
+  domain      String?
+  website     String?
+  industry    String?
+  location    String?
+  sourceUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  prospects HarveyProspect[]
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, domain])
+}
+
+/// A person at a company. Harvey's `prospects` row.
+model HarveyProspect {
+  id          String  @id @default(cuid())
+  workspaceId String
+  agentId     String
+  harveyId    String
+  companyId   String?
+
+  firstName            String?
+  lastName             String?
+  email                String
+  /// Harvey's verification verdict: verified | risky | guess | invalid. Kept as
+  /// text because it is Harvey's vocabulary, not ours, and it grows upstream.
+  emailStatus          String?
+  title                String?
+  /// Harvey's own pipeline status (new, contacted, replied, closed, ...). Also
+  /// text, for the same reason.
+  status               String?
+  /// Scout's fit score, 0-100.
+  score                Int?
+  personalizationNotes String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  company   HarveyCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  emails    HarveyEmail[]
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, email])
+}
+
+/// One outgoing email, mirrored from Harvey's outbox so it can be approved
+/// from a phone. Harvey still owns sending; this row never sends anything.
+model HarveyEmail {
+  id          String  @id @default(cuid())
+  workspaceId String
+  agentId     String
+  harveyId    String
+  prospectId  String?
+
+  /// Harvey's campaign id and the step within its 3-email sequence.
+  campaignHarveyId String?
+  step             Int               @default(1)
+  /// "sequence" for a cold step, "reply" for a Handler response.
+  kind             String            @default("sequence")
+  toEmail          String
+  subject          String
+  body             String
+  status           HarveyEmailStatus @default(PENDING_REVIEW)
+  sendAt           DateTime?
+  sentAt           DateTime?
+  error            String?
+
+  /// The tracked link minted for this email, when it carries one. This is the
+  /// join that closes the loop: a WhatsAppLead carrying the same link's slug
+  /// is a reply to this exact email.
+  trackedLinkId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       HarveyAgent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  prospect    HarveyProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  trackedLink TrackedLink?    @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([createdAt])
+}
+
+/// Exactly Harvey's five outbox statuses, so the mirror cannot disagree with
+/// the thing it mirrors. A rejection is Harvey's `cancelled` with a reason in
+/// `error`, not a sixth status of our own.
+///
+/// Staleness is deliberately absent too: an email written a week ago is
+/// personalized on week-old observations and should be looked at again, but
+/// that is a property of (PENDING_REVIEW, createdAt), derived where it is
+/// shown rather than stored as a state that could drift.
+enum HarveyEmailStatus {
+  PENDING_REVIEW
+  APPROVED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+/// What the operator decided, waiting for Harvey to collect it.
+///
+/// A queue rather than a push, because the operator's machine is asleep most
+/// of the time and no webhook would reach it. Every command is delivered at
+/// least once and is safe to apply twice: approving an already-approved outbox
+/// item is a no-op in Harvey, and the ack is keyed by command id.
+model HarveyCommand {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  agentId        String
+  kind           HarveyCommandKind
+  /// Harvey's id for the thing being acted on (an outbox item, usually).
+  targetHarveyId String?
+  payload        Json?
+  issuedByUserId String?
+
+  deliveredAt DateTime?
+  ackedAt     DateTime?
+  /// What Harvey reported back: "approved", "already_sent", "not_found".
+  result      String?
+  /// Commands go stale. A three-day-old approval should not fire when the
+  /// laptop finally wakes, so Harvey refuses an expired command and says so.
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  /// The poll query: everything this agent has not acked yet.
+  @@index([agentId, ackedAt])
+  @@index([workspaceId])
+}
+
+/// Deliberately small. Every command either decides one email or flips the
+/// kill switch, which is the whole vocabulary needed to run outreach from a
+/// phone. EDIT_OUTBOX carries the corrected subject and body in `payload`, so
+/// a wrong line can be fixed on the spot instead of rejected and rewritten.
+enum HarveyCommandKind {
+  APPROVE_EMAIL
+  REJECT_EMAIL
+  EDIT_EMAIL
+  APPROVE_ALL
+  PAUSE_SENDING
+  RESUME_SENDING
 }

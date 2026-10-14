@@ -14,7 +14,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const HARVEY_SIGNATURE_HEADER = "x-harvey-signature";
 export const HARVEY_TIMESTAMP_HEADER = "x-harvey-timestamp";
-export const HARVEY_NODE_HEADER = "x-harvey-node";
+export const HARVEY_AGENT_HEADER = "x-harvey-agent";
 
 /** How far apart Harvey's clock and ours may be before we reject the request. */
 export const DEFAULT_TOLERANCE_SECONDS = 300;

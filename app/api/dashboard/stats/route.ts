@@ -117,10 +117,21 @@ export async function GET(request: NextRequest) {
       where: { workspaceId, createdAt: { gte: monthStart }, ...accountFilter },
       _count: { _all: true },
     }),
+    // This dashboard is the Instagram one, so it counts Instagram clicks only.
+    // Outbound links (Harvey cold email) have no automation behind them, and
+    // without this filter they would quietly inflate these two numbers
+    // whenever no specific account is selected.
     prisma.linkClick.count({
-      where: { workspaceId, createdAt: { gte: monthStart }, ...accountFilter },
+      where: {
+        workspaceId,
+        automationId: { not: null },
+        createdAt: { gte: monthStart },
+        ...accountFilter,
+      },
     }),
-    prisma.linkClick.count({ where: { workspaceId, ...accountFilter } }),
+    prisma.linkClick.count({
+      where: { workspaceId, automationId: { not: null }, ...accountFilter },
+    }),
     prisma.dmLog.groupBy({
       by: ["matchedKeyword"],
       where: { workspaceId, matchedKeyword: { not: null }, ...accountFilter },
