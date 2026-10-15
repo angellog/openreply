@@ -99,3 +99,53 @@ describe("tracked link redirect route", () => {
     expect(mockPrisma.linkClick.create).not.toHaveBeenCalled();
   });
 });
+
+describe("outbound links with no Instagram campaign behind them", () => {
+  it("records the click with a null automation and account", async () => {
+    mockPrisma.trackedLink.findUnique.mockResolvedValue({
+      id: "link_harvey",
+      workspaceId: "workspace_123",
+      automationId: null,
+      destinationUrl: "https://wa.me/256727214773?text=Wholesale%20(ref%3A%20%7Bref%7D)",
+      automation: null,
+    });
+    mockPrisma.linkClick.create.mockResolvedValue({});
+
+    const response = await GET(
+      new Request("https://app.test/r/hv_9fQ2xs") as never,
+      { params: Promise.resolve({ slug: "hv_9fQ2xs" }) }
+    );
+
+    expect(response.status).toBe(302);
+    expect(mockPrisma.linkClick.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspaceId: "workspace_123",
+          automationId: null,
+          instagramAccountId: null,
+          trackedLinkId: "link_harvey",
+        }),
+      })
+    );
+  });
+
+  it("still resolves the WhatsApp ref, so the chat is attributed to the email", async () => {
+    mockPrisma.trackedLink.findUnique.mockResolvedValue({
+      id: "link_harvey",
+      workspaceId: "workspace_123",
+      automationId: null,
+      destinationUrl: "https://wa.me/256727214773?text=Wholesale%20(ref%3A%20%7Bref%7D)",
+      automation: null,
+    });
+    mockPrisma.linkClick.create.mockResolvedValue({});
+
+    const response = await GET(
+      new Request("https://app.test/r/hv_9fQ2xs") as never,
+      { params: Promise.resolve({ slug: "hv_9fQ2xs" }) }
+    );
+
+    const location = response.headers.get("location") ?? "";
+    expect(decodeURIComponent(location)).toContain("(ref: hv_9fQ2xs)");
+    expect(location).not.toContain("%7Bref%7D");
+  });
+});

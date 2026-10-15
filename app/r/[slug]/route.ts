@@ -31,8 +31,11 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
   await prisma.linkClick.create({
     data: {
       workspaceId: trackedLink.workspaceId,
+      // Both null for an outbound link (Harvey cold email): there is no
+      // Instagram campaign behind it. The click is still recorded, and the
+      // WhatsApp ref below still attributes the chat to this exact link.
       automationId: trackedLink.automationId,
-      instagramAccountId: trackedLink.automation.instagramAccountId,
+      instagramAccountId: trackedLink.automation?.instagramAccountId ?? null,
       trackedLinkId: trackedLink.id,
       ipHash: hashClickIp(getRequestIp(request)),
       userAgent: request.headers.get("user-agent"),

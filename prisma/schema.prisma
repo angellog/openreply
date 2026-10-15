@@ -18,11 +18,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts          Account[]
-  sessions          Session[]
-  ownedWorkspaces   Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers  WorkspaceMember[]
-  sentInvitations   WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]           @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  sentInvitations  WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
 }
 
 model Account {
@@ -65,12 +65,15 @@ model VerificationToken {
 }
 
 model Workspace {
-  id        String   @id @default(cuid())
-  name      String
-  ownerId   String
-  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  /// Brand segment of the public resource URL, /resources/<publicSlug>. Null
+  /// until the workspace publishes a resource hub.
+  publicSlug String?  @unique
+  ownerId    String
+  owner      User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   usagePeriodStart  DateTime @default(now())
   dmsSentThisPeriod Int      @default(0)
@@ -84,10 +87,17 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
-
-  @@index([ownerId])
   whatsappLeads     WhatsAppLead[]
   whatsappMessages  WhatsAppMessage[]
+  harveyAgents      HarveyAgent[]
+  harveyCompanies   HarveyCompany[]
+  harveyProspects   HarveyProspect[]
+  harveyEmails      HarveyEmail[]
+  harveyCommands    HarveyCommand[]
+  resources         Resource[]
+  resourceLeads     ResourceLead[]
+
+  @@index([ownerId])
 }
 
 model WorkspaceMember {
@@ -127,25 +137,25 @@ model WorkspaceInvitation {
 }
 
 model InstagramAccount {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   workspaceId       String
-  instagramId       String   @unique
+  instagramId       String    @unique
   username          String
   name              String?
   accessToken       String
   tokenExpiresAt    DateTime?
-  webhookSubscribed Boolean  @default(false)
-  connectedAt       DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  webhookSubscribed Boolean   @default(false)
+  connectedAt       DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automations Automation[]
-  dmLogs      DmLog[]
-  linkClicks  LinkClick[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automations       Automation[]
+  dmLogs            DmLog[]
+  linkClicks        LinkClick[]
   followerSnapshots FollowerSnapshot[]
+  whatsappLeads     WhatsAppLead[]
 
   @@index([workspaceId])
-  whatsappLeads WhatsAppLead[]
 }
 
 /// Daily follower total for one account. Instagram only retains ~30 days of
@@ -169,42 +179,42 @@ model FollowerSnapshot {
 }
 
 model Automation {
-  id                 String   @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   instagramAccountId String
 
-  name           String
-  goal           String?
-  postId         String?
-  postUrl        String?
-  pendingNextReel Boolean @default(false)
-  matchAnyPost   Boolean @default(false)
-  keywords       String[]
-  matchAnyWord   Boolean @default(false)
+  name                    String
+  goal                    String?
+  postId                  String?
+  postUrl                 String?
+  pendingNextReel         Boolean  @default(false)
+  matchAnyPost            Boolean  @default(false)
+  keywords                String[]
+  matchAnyWord            Boolean  @default(false)
   // Also fire this campaign when someone sends a DM whose text matches the
   // keywords above. Independent of the post trigger — a DM has no media, so
   // postId / matchAnyPost do not apply to it.
-  dmTriggerEnabled Boolean @default(false)
-  dmMessage      String
-  openingDmEnabled     Boolean @default(false)
-  openingDmMessage     String?
-  openingDmButtonLabel String?
-  linkButtonLabel      String?
-  requireFollow           Boolean @default(false)
+  dmTriggerEnabled        Boolean  @default(false)
+  dmMessage               String
+  openingDmEnabled        Boolean  @default(false)
+  openingDmMessage        String?
+  openingDmButtonLabel    String?
+  linkButtonLabel         String?
+  requireFollow           Boolean  @default(false)
   followPromptMessage     String?
   followPromptButtonLabel String?
-  followUpEnabled Boolean @default(false)
-  followUpMessage String?
+  followUpEnabled         Boolean  @default(false)
+  followUpMessage         String?
   // Minutes to wait after the link is delivered before sending the follow-up.
   // 0 sends it right away.
-  followUpDelayMinutes Int @default(0)
-  publicReplyEnabled Boolean @default(false)
-  publicReplyMessage String?
-  publicReplyMessages String[] @default([])
-  isActive       Boolean @default(true)
-  wholeWordMatch Boolean @default(true)
-  reportShareSlug    String? @unique
-  reportShareEnabled Boolean @default(true)
+  followUpDelayMinutes    Int      @default(0)
+  publicReplyEnabled      Boolean  @default(false)
+  publicReplyMessage      String?
+  publicReplyMessages     String[] @default([])
+  isActive                Boolean  @default(true)
+  wholeWordMatch          Boolean  @default(true)
+  reportShareSlug         String?  @unique
+  reportShareEnabled      Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,28 +224,28 @@ model Automation {
   dmLogs           DmLog[]
   trackedLinks     TrackedLink[]
   linkClicks       LinkClick[]
+  whatsappLeads    WhatsAppLead[]
 
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
-  whatsappLeads    WhatsAppLead[]
 }
 
 model DmLog {
-  id                 String     @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   automationId       String
   instagramAccountId String
 
-  commenterId   String
-  commenterName String?
-  commentText   String
-  commentId     String
+  commenterId    String
+  commenterName  String?
+  commentText    String
+  commentId      String
   matchedKeyword String?
-  status        DmStatus @default(PENDING)
-  attempts      Int      @default(0)
-  dmSentAt      DateTime?
-  errorMessage  String?
+  status         DmStatus  @default(PENDING)
+  attempts       Int       @default(0)
+  dmSentAt       DateTime?
+  errorMessage   String?
 
   // The public comment reply is delivered independently of the DM, so its
   // outcome is tracked separately. publicReplySentAt makes it idempotent across
@@ -274,39 +284,57 @@ model ProcessedComment {
 }
 
 model TrackedLink {
-  id             String   @id @default(cuid())
+  id             String            @id @default(cuid())
   workspaceId    String
-  automationId   String
-  slug           String   @unique
+  /// Null for links that belong to an outbound channel rather than an
+  /// Instagram campaign (a Harvey cold email has no Automation, and no
+  /// Instagram account either). Every existing query filters by a specific
+  /// automationId, so these rows are invisible to the Instagram reports
+  /// instead of polluting them.
+  automationId   String?
+  source         TrackedLinkSource @default(INSTAGRAM)
+  slug           String            @unique
   label          String?
   destinationUrl String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automation Automation  @relation(fields: [automationId], references: [id], onDelete: Cascade)
-  clicks     LinkClick[]
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation    Automation?    @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  clicks        LinkClick[]
+  whatsappLeads WhatsAppLead[]
+  harveyEmails  HarveyEmail[]
+  resourceLeads ResourceLead[]
 
   @@index([workspaceId])
   @@index([automationId])
-  whatsappLeads WhatsAppLead[]
+  @@index([workspaceId, source])
+}
+
+/// Where a tracked link was handed out. The redirect and the WhatsApp ref
+/// machinery are identical for both; only the attribution differs.
+enum TrackedLinkSource {
+  INSTAGRAM
+  HARVEY_EMAIL
 }
 
 model LinkClick {
   id                 String   @id @default(cuid())
   workspaceId        String
-  automationId       String
-  instagramAccountId String
+  /// Both null when the click came from a link that is not an Instagram
+  /// campaign's. See TrackedLink.automationId.
+  automationId       String?
+  instagramAccountId String?
   trackedLinkId      String
   ipHash             String?
   userAgent          String?
   referrer           String?
   createdAt          DateTime @default(now())
 
-  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automation       Automation       @relation(fields: [automationId], references: [id], onDelete: Cascade)
-  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
-  trackedLink      TrackedLink      @relation(fields: [trackedLinkId], references: [id], onDelete: Cascade)
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation       Automation?       @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  trackedLink      TrackedLink       @relation(fields: [trackedLinkId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([automationId])
@@ -317,14 +345,14 @@ model LinkClick {
 }
 
 model WebhookEvent {
-  id          String        @id @default(cuid())
-  workspaceId String?
-  object      String?
-  payload     Json
-  status      WebhookStatus @default(PENDING)
+  id           String        @id @default(cuid())
+  workspaceId  String?
+  object       String?
+  payload      Json
+  status       WebhookStatus @default(PENDING)
   errorMessage String?
-  createdAt   DateTime      @default(now())
-  processedAt DateTime?
+  createdAt    DateTime      @default(now())
+  processedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -333,13 +361,13 @@ model WebhookEvent {
 }
 
 model OperationalEvent {
-  id          String                @id @default(cuid())
+  id          String                 @id @default(cuid())
   workspaceId String?
   source      OperationalEventSource
-  level       OperationalEventLevel @default(INFO)
+  level       OperationalEventLevel  @default(INFO)
   message     String
   payload     Json?
-  createdAt   DateTime              @default(now())
+  createdAt   DateTime               @default(now())
   resolvedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -384,6 +412,7 @@ enum OperationalEventSource {
   TOKEN_REFRESH
   HEALTH
   SYSTEM
+  HARVEY
 }
 
 enum OperationalEventLevel {
@@ -449,4 +478,352 @@ model WhatsAppMessage {
 enum WhatsAppDirection {
   INBOUND
   OUTBOUND
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Harvey bridge
+//
+// Harvey is an autonomous outbound-email agent that runs on a machine the
+// operator controls, because its model backend is the operator's logged-in
+// Claude CLI rather than a metered API. It cannot run here. So this app is its
+// control plane: Harvey pushes what it learned and polls for what the operator
+// decided, which means no inbound port on the operator's network and nothing
+// to expose. The operator approves cold emails from a phone.
+//
+// Harvey's SQLite stays the source of truth for Harvey's own work. These tables
+// are a mirror, keyed by Harvey's ids so a replayed sync is a no-op.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One Harvey instance: one brand, one checkout, one SQLite file on the
+/// operator's machine. Several can share a workspace, which is the normal case
+/// here — sneaker wholesale and advisory outreach have different senders,
+/// different offers and different handoffs, so they are different agents even
+/// though one person reviews both.
+model HarveyAgent {
+  id          String            @id @default(cuid())
+  workspaceId String
+  /// Stable per-workspace name, e.g. "feetbit-wholesale" or "vantik".
+  name        String
+  status      HarveyAgentStatus @default(ACTIVE)
+
+  /// Shared HMAC secret, AES-256-GCM at rest via lib/meta/oauth.ts, the same
+  /// way Instagram tokens are stored. Verifying a signature needs the
+  /// plaintext, so a one-way hash is not an option here.
+  secretEncrypted String
+  /// First characters of the secret, so the operator can tell which secret a
+  /// machine holds without the secret being retrievable.
+  secretPrefix    String
+
+  /// Where this agent's tracked links send people. Held here rather than taken
+  /// from the mint request, so a compromised agent cannot point a link on this
+  /// domain at a number or site the operator never chose.
+  whatsappPhone         String?
+  whatsappMessage       String?
+  /// One-time auto-reply for chats arriving through this agent's links. Null
+  /// means stay silent and let a human answer.
+  whatsappGreeting      String?
+  /// Non-WhatsApp handoff, e.g. a Cal.com booking page for advisory outreach.
+  defaultDestinationUrl String?
+
+  /// Last request of any kind. Drives the "Harvey hasn't checked in" warning:
+  /// a laptop that slept for three days looks identical to a crashed one
+  /// unless this is on screen.
+  lastSeenAt    DateTime?
+  lastSyncAt    DateTime?
+  /// Harvey's reported version and brain provider, for the diagnostics page.
+  agentVersion  String?
+  brainProvider String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companies HarveyCompany[]
+  prospects HarveyProspect[]
+  emails    HarveyEmail[]
+  commands  HarveyCommand[]
+
+  /// Names are how the operator tells two agents apart, so they must be
+  /// unique within a workspace.
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+/// Revoking beats deleting: it stops the secret working immediately while
+/// keeping every prospect, email and attribution the agent produced.
+enum HarveyAgentStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// A business Harvey discovered. The B2B counterpart to an Instagram follower:
+/// a boutique, a gym, a reseller.
+///
+/// Kept as its own table rather than denormalised onto the prospect, because
+/// Harvey's own model is company-first — its observations hang off a company
+/// id — and "which boutiques do we know, and who have we reached at each" is
+/// the question this whole channel exists to answer.
+model HarveyCompany {
+  id          String   @id @default(cuid())
+  workspaceId String
+  agentId     String
+  /// Harvey's own row id. The idempotency key for every sync.
+  harveyId    String
+  name        String
+  domain      String?
+  website     String?
+  industry    String?
+  location    String?
+  sourceUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  prospects HarveyProspect[]
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, domain])
+}
+
+/// A person at a company. Harvey's `prospects` row.
+model HarveyProspect {
+  id          String  @id @default(cuid())
+  workspaceId String
+  agentId     String
+  harveyId    String
+  companyId   String?
+
+  firstName            String?
+  lastName             String?
+  email                String
+  /// Harvey's verification verdict: verified | risky | guess | invalid. Kept as
+  /// text because it is Harvey's vocabulary, not ours, and it grows upstream.
+  emailStatus          String?
+  title                String?
+  /// Harvey's own pipeline status (new, contacted, replied, closed, ...). Also
+  /// text, for the same reason.
+  status               String?
+  /// Scout's fit score, 0-100.
+  score                Int?
+  personalizationNotes String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  company   HarveyCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  emails    HarveyEmail[]
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, email])
+}
+
+/// One outgoing email, mirrored from Harvey's outbox so it can be approved
+/// from a phone. Harvey still owns sending; this row never sends anything.
+model HarveyEmail {
+  id          String  @id @default(cuid())
+  workspaceId String
+  agentId     String
+  harveyId    String
+  prospectId  String?
+
+  /// Harvey's campaign id and the step within its 3-email sequence.
+  campaignHarveyId String?
+  step             Int               @default(1)
+  /// "sequence" for a cold step, "reply" for a Handler response.
+  kind             String            @default("sequence")
+  toEmail          String
+  subject          String
+  body             String
+  status           HarveyEmailStatus @default(PENDING_REVIEW)
+  sendAt           DateTime?
+  sentAt           DateTime?
+  error            String?
+
+  /// The tracked link minted for this email, when it carries one. This is the
+  /// join that closes the loop: a WhatsAppLead carrying the same link's slug
+  /// is a reply to this exact email.
+  trackedLinkId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       HarveyAgent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  prospect    HarveyProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  trackedLink TrackedLink?    @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+
+  @@unique([agentId, harveyId])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([createdAt])
+}
+
+/// Exactly Harvey's five outbox statuses, so the mirror cannot disagree with
+/// the thing it mirrors. A rejection is Harvey's `cancelled` with a reason in
+/// `error`, not a sixth status of our own.
+///
+/// Staleness is deliberately absent too: an email written a week ago is
+/// personalized on week-old observations and should be looked at again, but
+/// that is a property of (PENDING_REVIEW, createdAt), derived where it is
+/// shown rather than stored as a state that could drift.
+enum HarveyEmailStatus {
+  PENDING_REVIEW
+  APPROVED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+/// What the operator decided, waiting for Harvey to collect it.
+///
+/// A queue rather than a push, because the operator's machine is asleep most
+/// of the time and no webhook would reach it. Every command is delivered at
+/// least once and is safe to apply twice: approving an already-approved outbox
+/// item is a no-op in Harvey, and the ack is keyed by command id.
+model HarveyCommand {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  agentId        String
+  kind           HarveyCommandKind
+  /// Harvey's id for the thing being acted on (an outbox item, usually).
+  targetHarveyId String?
+  payload        Json?
+  issuedByUserId String?
+
+  deliveredAt DateTime?
+  ackedAt     DateTime?
+  /// What Harvey reported back: "approved", "already_sent", "not_found".
+  result      String?
+  /// Commands go stale. A three-day-old approval should not fire when the
+  /// laptop finally wakes, so Harvey refuses an expired command and says so.
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  /// The poll query: everything this agent has not acked yet.
+  @@index([agentId, ackedAt])
+  @@index([workspaceId])
+}
+
+/// Deliberately small. Every command either decides one email or flips the
+/// kill switch, which is the whole vocabulary needed to run outreach from a
+/// phone. EDIT_OUTBOX carries the corrected subject and body in `payload`, so
+/// a wrong line can be fixed on the spot instead of rejected and rewritten.
+enum HarveyCommandKind {
+  APPROVE_EMAIL
+  REJECT_EMAIL
+  EDIT_EMAIL
+  APPROVE_ALL
+  PAUSE_SENDING
+  RESUME_SENDING
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resource library
+//
+// A lead magnet hub: a public page per brand listing its resources, and a gate
+// per resource that asks for an email before handing over the link.
+//
+// This is where the outbound channel gets its fuel. An Instagram commenter
+// never gives up an email address, so there is no honest path from a comment to
+// a cold sequence. A resource gate is the one place a warm visitor hands over
+// the one thing Harvey needs, knowingly and in exchange for something.
+//
+// Which makes consent the whole design. An address given to get a checklist is
+// consent for that checklist, not for a three-email sequence. The tick, its
+// exact wording and its timestamp are all stored, and only a lead who opted in
+// is ever offered to Harvey.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Resource {
+  id             String  @id @default(cuid())
+  workspaceId    String
+  /// Last path segment of the public URL, /resources/<brand>/<slug>.
+  slug           String
+  title          String
+  /// One line under the title on the gate. The reason to hand over an address.
+  summary        String
+  /// Longer copy on the gate page. Markdown is not rendered; plain text only.
+  description    String?
+  /// Where the resource actually lives, usually a Drive link. Never shown
+  /// before an address is given, though a link that leaks is still a link that
+  /// works: this is a soft gate, like every other one on the web.
+  destinationUrl String
+  /// Short label on the hub card, e.g. "Checklist" or "Template".
+  kind           String?
+  /// Published resources are visible publicly. Everything starts unpublished so
+  /// a half-written gate is never live.
+  isPublished    Boolean @default(false)
+  position       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads     ResourceLead[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, isPublished])
+}
+
+/// One address, given once, for one resource.
+model ResourceLead {
+  id          String @id @default(cuid())
+  workspaceId String
+  resourceId  String
+
+  email String
+  name  String?
+
+  /// Did they tick the box agreeing to hear more. False is the default and the
+  /// unticked state: a resource is handed over either way, and only a true here
+  /// ever reaches the outbound agent.
+  consentMarketing Boolean   @default(false)
+  /// The exact sentence shown next to the box, stored verbatim. Consent is only
+  /// meaningful if you can say what was agreed to, and that wording will change
+  /// over time.
+  consentText      String?
+  consentedAt      DateTime?
+
+  /// The tracked link that brought them, when they arrived through one.
+  refSlug       String?
+  trackedLinkId String?
+
+  ipHash    String?
+  userAgent String?
+  referrer  String?
+
+  /// Whether the copy of the link we emailed actually arrived. A bounce is what
+  /// tells us an address is junk, which is why the link is emailed even though
+  /// the page also shows it.
+  deliveryStatus ResourceDeliveryStatus @default(PENDING)
+  deliveryError  String?
+
+  /// Set once the outbound agent has taken this lead as a prospect, so it is
+  /// offered exactly once.
+  exportedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  resource    Resource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  trackedLink TrackedLink? @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+
+  /// One row per address per resource. Asking again for the same thing is a
+  /// re-send, not a second lead.
+  @@unique([resourceId, email])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, consentMarketing, exportedAt])
+}
+
+enum ResourceDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
 }

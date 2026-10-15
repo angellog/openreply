@@ -24,7 +24,10 @@ export async function GET() {
     }),
     prisma.linkClick.groupBy({
       by: ["automationId"],
-      where: { workspaceId },
+      // Outbound clicks have no automation, so they would group under a null
+      // key that no row below can match. Excluded explicitly rather than
+      // relying on that.
+      where: { workspaceId, automationId: { not: null } },
       _count: { _all: true },
     }),
     prisma.whatsAppLead.groupBy({
