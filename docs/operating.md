@@ -77,12 +77,20 @@ handoffs, so they are different agents even though one person reviews both.
 
 1. **Outreach → Pair another Harvey.** Type a short name: `feetbit-wholesale`,
    `vantik`. Lower-case, dashes, no spaces.
-2. You get two lines, **shown once**:
+2. You get two lines, **shown once**. Paste them into that brand's Harvey
+   `.env`, which lives at `~/Projects/harvey/.env` (one per checkout). It is
+   gitignored, so it never leaves the machine.
+
+   ```bash
+   open -a TextEdit ~/Projects/harvey/.env     # or: code ~/Projects/harvey/.env
    ```
-   OPENREPLY_AGENT_ID=...
-   OPENREPLY_AGENT_SECRET=...
+
+   Fill in the two lines near the bottom:
    ```
-   Paste them into that brand's Harvey `.env`. Not retrievable afterwards.
+   OPENREPLY_AGENT_ID=
+   OPENREPLY_AGENT_SECRET=
+   ```
+   Not retrievable afterwards. Pair again with the same name to reissue.
 3. In the same Harvey's `harvey.yaml`:
    ```yaml
    openreply:

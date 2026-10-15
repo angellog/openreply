@@ -139,6 +139,8 @@ opener that asks a question beats one that asks for a click.
 
 ## Deliverability, which decides whether any of this works
 
+**Full guide with DNS records and a warm-up schedule: [deliverability.md](deliverability.md).**
+
 The software is the easy part. As the sender, you carry the consequences.
 
 - **Use a separate domain.** Not the domain your customers already email. A
