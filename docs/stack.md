@@ -2,7 +2,8 @@
 
 Everything OpenReply needs to run, in one place: the application libraries, the
 runtime processes, and the specific (free) services this instance is deployed on.
-For the step-by-step setup, see [setup.md](setup.md).
+For the step-by-step setup, see [setup.md](setup.md). For what the stack is
+*for* and how to drive it day to day, see [operating.md](operating.md).
 
 ## Application
 
