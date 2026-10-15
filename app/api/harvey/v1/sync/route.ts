@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { authenticateHarveyRequest } from "@/lib/harvey/auth";
+import { readOutreachEvents } from "@/lib/outreach/events";
 import {
   COMMAND_TTL_MS,
   EMAIL_STATUS_TO_DB,
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { runtime, acks, leadAcks, companies, prospects, emails } = parsed.data;
+  const { runtime, acks, leadAcks, eventCursor, companies, prospects, emails } =
+    parsed.data;
   const workspaceId = agent.workspaceId;
 
   // ── 1. Record what Harvey learned ────────────────────────────────────────
@@ -223,6 +225,16 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // What happened after this agent's emails went out: clicks, and replies that
+  // arrived on WhatsApp instead of by email. Harvey cannot see either for
+  // itself.
+  const events = await readOutreachEvents({
+    agentId: agent.id,
+    workspaceId,
+    since: eventCursor ?? 0,
+    now,
+  });
+
   await prisma.harveyAgent.update({
     where: { id: agent.id },
     data: {
@@ -247,6 +259,15 @@ export async function POST(request: NextRequest) {
         targetHarveyId: command.targetHarveyId,
         payload: command.payload,
         expiresAt: command.expiresAt.toISOString(),
+      })),
+      events: events.map((event) => ({
+        seq: event.seq,
+        type: event.type,
+        prospectHarveyId: event.prospectHarveyId,
+        emailHarveyId: event.emailHarveyId,
+        trackedLinkSlug: event.trackedLinkSlug,
+        payload: event.payload,
+        at: event.createdAt.toISOString(),
       })),
       leads: leads.map((lead) => ({
         id: lead.id,

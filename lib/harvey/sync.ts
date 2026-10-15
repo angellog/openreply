@@ -88,6 +88,12 @@ export const harveySyncRequest = z.object({
     .optional(),
   /** Resource leads the agent has taken as prospects, by their OpenReply id. */
   leadAcks: z.array(z.string().min(1).max(64)).max(MAX_BATCH).optional(),
+  /**
+   * Highest event seq this agent has applied. The agent keeps the cursor, not
+   * the server: an agent that loses its database can replay from 0, and every
+   * handler on its side is idempotent so replaying costs nothing but time.
+   */
+  eventCursor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   companies: z.array(harveyCompanyInput).max(MAX_BATCH).optional(),
   prospects: z.array(harveyProspectInput).max(MAX_BATCH).optional(),
   emails: z.array(harveyEmailInput).max(MAX_BATCH).optional(),

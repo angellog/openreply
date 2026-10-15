@@ -96,6 +96,7 @@ model Workspace {
   harveyCommands    HarveyCommand[]
   resources         Resource[]
   resourceLeads     ResourceLead[]
+  outreachEvents    OutreachEvent[]
 
   @@index([ownerId])
 }
@@ -541,6 +542,7 @@ model HarveyAgent {
   prospects HarveyProspect[]
   emails    HarveyEmail[]
   commands  HarveyCommand[]
+  events    OutreachEvent[]
 
   /// Names are how the operator tells two agents apart, so they must be
   /// unique within a workspace.
@@ -826,4 +828,52 @@ enum ResourceDeliveryStatus {
   PENDING
   SENT
   FAILED
+}
+
+/// Something that happened after an email went out.
+///
+/// Harvey sends and then goes blind: it can read its own mailbox, but a click
+/// and a WhatsApp reply happen here. This is the stream it reads to find out,
+/// which is what lets it stop a sequence when someone answers on a different
+/// channel, and lets its scoring see that a business is already engaging.
+///
+/// Append-only. Nothing updates a row once written, so a reader that keeps a
+/// cursor can never miss a change to something it already read.
+model OutreachEvent {
+  /// Monotonic cursor. An agent remembers the last seq it applied and asks for
+  /// what came after.
+  seq         Int    @id @default(autoincrement())
+  workspaceId String
+  /// Null for an event that belongs to no particular agent, such as a resource
+  /// download by someone no agent has claimed yet.
+  agentId String?
+  type    OutreachEventType
+
+  /// Harvey's own ids, carried on the event so the agent can resolve the row
+  /// in its own database without a lookup table on either side.
+  prospectHarveyId String?
+  emailHarveyId    String?
+  trackedLinkSlug  String?
+
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     HarveyAgent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  /// The poll query: everything after an agent's cursor.
+  @@index([agentId, seq])
+  @@index([workspaceId, createdAt])
+}
+
+enum OutreachEventType {
+  /// Someone opened the tracked link in one of Harvey's emails.
+  LINK_CLICKED
+  /// A WhatsApp chat began from one of those links. The strongest signal here:
+  /// they answered, just not by email.
+  WHATSAPP_STARTED
+  /// A further message in that chat.
+  WHATSAPP_MESSAGE_IN
+  /// Someone took a resource from the hub.
+  RESOURCE_CLAIMED
 }

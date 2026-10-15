@@ -10,6 +10,7 @@ const { mocks } = vi.hoisted(() => ({
     agent: { update: vi.fn() },
     trackedLink: { create: vi.fn() },
     lead: { findMany: vi.fn(), updateMany: vi.fn() },
+    event: { findMany: vi.fn() },
     transaction: vi.fn(),
   },
 }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/db/client", () => ({
     harveyAgent: mocks.agent,
     trackedLink: mocks.trackedLink,
     resourceLead: mocks.lead,
+    outreachEvent: mocks.event,
   },
 }));
 
@@ -64,6 +66,7 @@ beforeEach(() => {
   mocks.command.findMany.mockResolvedValue([]);
   mocks.lead.findMany.mockResolvedValue([]);
   mocks.lead.updateMany.mockResolvedValue({ count: 0 });
+  mocks.event.findMany.mockResolvedValue([]);
   mocks.command.updateMany.mockResolvedValue({ count: 0 });
   mocks.agent.update.mockResolvedValue({});
 });

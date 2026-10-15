@@ -11,6 +11,10 @@
  */
 
 import { prisma } from "@/lib/db/client";
+import {
+  findHarveyEmailForTrackedLink,
+  recordOutreachEvent,
+} from "@/lib/outreach/events";
 import { renderMessageWithoutLink } from "@/lib/tracking/message";
 import { chatIdToPhone, extractRefSlug } from "@/lib/whatsapp/ref";
 import {
@@ -71,6 +75,7 @@ export async function handleInboundWhatsAppMessage(
           id: true,
           workspaceId: true,
           automationId: true,
+          source: true,
           automation: {
             select: {
               id: true,
@@ -86,7 +91,14 @@ export async function handleInboundWhatsAppMessage(
 
   const existingLead = await prisma.whatsAppLead.findFirst({
     where: { chatId },
-    select: { id: true, workspaceId: true, automationId: true },
+    select: {
+      id: true,
+      workspaceId: true,
+      automationId: true,
+      // Carried so a follow-up message on an outbound-sourced chat can still
+      // be reported, long after the first message brought the ref.
+      trackedLink: { select: { id: true, source: true } },
+    },
   });
 
   // Without a ref and without a prior chat there is nothing to attribute this
@@ -142,6 +154,34 @@ export async function handleInboundWhatsAppMessage(
     })
     // Same provider id twice means a webhook retry, not a new message.
     .catch(() => undefined);
+
+  // A chat that began from a cold email is a reply on a channel the agent
+  // that sent it cannot see. It is the single most important thing to tell it,
+  // because it is what stops the rest of the sequence going out to someone who
+  // has already answered.
+  const outboundLink =
+    trackedLink?.source === "HARVEY_EMAIL"
+      ? { id: trackedLink.id, slug: refSlug }
+      : existingLead?.trackedLink?.source === "HARVEY_EMAIL"
+        ? { id: existingLead.trackedLink.id, slug: null }
+        : null;
+
+  if (outboundLink) {
+    const email = await findHarveyEmailForTrackedLink(outboundLink.id);
+    if (email) {
+      await recordOutreachEvent({
+        workspaceId,
+        agentId: email.agentId,
+        // The first message on a chat is the reply; later ones are the
+        // conversation continuing.
+        type: existingLead ? "WHATSAPP_MESSAGE_IN" : "WHATSAPP_STARTED",
+        emailHarveyId: email.harveyId,
+        prospectHarveyId: email.prospect?.harveyId ?? null,
+        trackedLinkSlug: outboundLink.slug,
+        payload: { body: body.slice(0, 1000), displayName },
+      });
+    }
+  }
 
   const replied = await maybeAutoReply({
     leadId: lead.id,
