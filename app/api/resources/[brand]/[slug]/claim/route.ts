@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { getRequestIp, hashClickIp } from "@/lib/tracking/server";
 import { getBaseUrl } from "@/lib/env";
 import { sendEmail } from "@/lib/email/send";
+import { recordOutreachEvent } from "@/lib/outreach/events";
 import {
   MARKETING_CONSENT_TEXT,
   buildDeliveryEmail,
@@ -152,6 +153,21 @@ export async function POST(
         },
       })
       .catch(() => undefined);
+  }
+
+  // Taking a resource is a buying signal in its own right, and the second one
+  // from the same address is a louder one. No agent is named: whichever agent
+  // already knows this address will recognise it, and the rest ignore it.
+  if (consented) {
+    await recordOutreachEvent({
+      workspaceId: resource.workspaceId,
+      type: "RESOURCE_CLAIMED",
+      payload: {
+        email: normalized.email,
+        resourceSlug: slug,
+        resourceTitle: resource.title,
+      },
+    });
   }
 
   return NextResponse.json({

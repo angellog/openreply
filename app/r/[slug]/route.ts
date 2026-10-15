@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { getRequestIp, hashClickIp } from "@/lib/tracking/server";
 import { resolveRefPlaceholder } from "@/lib/whatsapp/ref";
+import {
+  findHarveyEmailForTrackedLink,
+  recordOutreachEvent,
+} from "@/lib/outreach/events";
 
 type RedirectRouteProps = {
   params: Promise<{ slug: string }>;
@@ -15,6 +19,7 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
       id: true,
       workspaceId: true,
       automationId: true,
+      source: true,
       destinationUrl: true,
       automation: {
         select: {
@@ -42,6 +47,25 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
       referrer: request.headers.get("referer"),
     },
   });
+
+  // A click on an outbound link is news the agent that sent it cannot see for
+  // itself, so it goes on the event stream. Awaited rather than fired and
+  // forgotten: this runs in a serverless function that may be frozen the
+  // moment the response is returned.
+  if (trackedLink.source === "HARVEY_EMAIL") {
+    const email = await findHarveyEmailForTrackedLink(trackedLink.id);
+    if (email) {
+      await recordOutreachEvent({
+        workspaceId: trackedLink.workspaceId,
+        agentId: email.agentId,
+        type: "LINK_CLICKED",
+        emailHarveyId: email.harveyId,
+        prospectHarveyId: email.prospect?.harveyId ?? null,
+        trackedLinkSlug: slug,
+        payload: { step: email.step },
+      });
+    }
+  }
 
   // WhatsApp handoff links carry a {ref} placeholder until click time, because
   // the slug doesn't exist yet when the campaign is being built.

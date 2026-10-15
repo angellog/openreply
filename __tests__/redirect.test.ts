@@ -8,6 +8,12 @@ const { mockPrisma } = vi.hoisted(() => ({
     linkClick: {
       create: vi.fn(),
     },
+    harveyEmail: {
+      findFirst: vi.fn(),
+    },
+    outreachEvent: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -147,5 +153,59 @@ describe("outbound links with no Instagram campaign behind them", () => {
     const location = response.headers.get("location") ?? "";
     expect(decodeURIComponent(location)).toContain("(ref: hv_9fQ2xs)");
     expect(location).not.toContain("%7Bref%7D");
+  });
+});
+
+describe("telling the agent what happened", () => {
+  it("records a click on an outbound link, with the email it belongs to", async () => {
+    mockPrisma.trackedLink.findUnique.mockResolvedValue({
+      id: "link_harvey",
+      workspaceId: "workspace_123",
+      automationId: null,
+      source: "HARVEY_EMAIL",
+      destinationUrl: "https://wa.me/256727214773?text=hi",
+      automation: null,
+    });
+    mockPrisma.linkClick.create.mockResolvedValue({});
+    mockPrisma.harveyEmail.findFirst.mockResolvedValue({
+      harveyId: "o1",
+      agentId: "agent_1",
+      step: 2,
+      prospect: { harveyId: "p1", email: "a@b.co" },
+    });
+    mockPrisma.outreachEvent.create.mockResolvedValue({});
+
+    await GET(new Request("https://app.test/r/hv_9fQ2xs") as never, {
+      params: Promise.resolve({ slug: "hv_9fQ2xs" }),
+    });
+
+    expect(mockPrisma.outreachEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "LINK_CLICKED",
+        agentId: "agent_1",
+        emailHarveyId: "o1",
+        prospectHarveyId: "p1",
+        trackedLinkSlug: "hv_9fQ2xs",
+      }),
+    });
+  });
+
+  it("says nothing about a click on an Instagram campaign's link", async () => {
+    mockPrisma.trackedLink.findUnique.mockResolvedValue({
+      id: "link_ig",
+      workspaceId: "workspace_123",
+      automationId: "automation_123",
+      source: "INSTAGRAM",
+      destinationUrl: "https://example.com/offer",
+      automation: { instagramAccountId: "ig_1" },
+    });
+    mockPrisma.linkClick.create.mockResolvedValue({});
+
+    await GET(new Request("https://app.test/r/abc123") as never, {
+      params: Promise.resolve({ slug: "abc123" }),
+    });
+
+    expect(mockPrisma.harveyEmail.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.outreachEvent.create).not.toHaveBeenCalled();
   });
 });

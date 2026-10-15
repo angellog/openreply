@@ -6,6 +6,7 @@ const { mocks } = vi.hoisted(() => ({
     lead: { upsert: vi.fn(), update: vi.fn() },
     trackedLink: { findUnique: vi.fn() },
     opEvent: { create: vi.fn() },
+    outreachEvent: { create: vi.fn() },
     sendEmail: vi.fn(),
   },
 }));
@@ -16,6 +17,7 @@ vi.mock("@/lib/db/client", () => ({
     resourceLead: mocks.lead,
     trackedLink: mocks.trackedLink,
     operationalEvent: mocks.opEvent,
+    outreachEvent: mocks.outreachEvent,
   },
 }));
 vi.mock("@/lib/email/send", () => ({ sendEmail: mocks.sendEmail }));
@@ -54,6 +56,7 @@ beforeEach(() => {
   mocks.trackedLink.findUnique.mockResolvedValue(null);
   mocks.sendEmail.mockResolvedValue({ ok: true });
   mocks.opEvent.create.mockResolvedValue({});
+  mocks.outreachEvent.create.mockResolvedValue({});
 });
 
 describe("POST claim", () => {
