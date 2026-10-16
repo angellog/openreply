@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
+import { SystemStatusProvider } from "@/components/system-status";
+import SystemNotice from "@/components/system-notice";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -20,8 +22,12 @@ export default function DashboardShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    // h-dvh, not h-screen: on mobile browsers the URL bar eats into 100vh, which
-    // would push the composer and pagination controls below the fold.
+    // One status provider around the whole shell: the sidebar dots and the top
+    // bar's system line are the same data, and polling it twice on a phone is
+    // a battery cost with no benefit.
+    <SystemStatusProvider>
+    {/* h-dvh, not h-screen: on mobile browsers the URL bar eats into 100vh,
+        which would push the composer and pagination controls below the fold. */}
     <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar
         isOpen={sidebarOpen}
@@ -41,10 +47,14 @@ export default function DashboardShell({
             whole page sideways on a phone. */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="px-4 lg:px-8 py-5 sm:py-6 max-w-7xl mx-auto">
+            {/* Renders nothing unless this page's own system needs something,
+                so a healthy page is laid out exactly as before. */}
+            <SystemNotice />
             {children}
           </div>
         </main>
       </div>
     </div>
+    </SystemStatusProvider>
   );
 }

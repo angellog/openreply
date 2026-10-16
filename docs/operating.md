@@ -3,6 +3,17 @@
 What you have, what each piece is for, and how to get results out of it.
 [stack.md](stack.md) lists the libraries and hosts; this is the business layer.
 
+Two of this document's jobs have since moved into the product itself, where
+they can show live state instead of describing it:
+
+- **`/systems`** — every system, whether it is actually running right now, what
+  flows between them, and the files and tables each one owns.
+- **`/guide`** — the same ground as this file, in dependency order, with a live
+  state chip against each step. One tap from any page via the `?` in the top bar.
+
+[systems-map.md](systems-map.md) records the provenance and the seams: what came
+from the open-source project, what was fused in here, and where the two touch.
+
 ---
 
 ## The one-sentence version
@@ -156,8 +167,14 @@ send. That is the entire daily obligation. Nothing goes out otherwise.
 
 ## What each page is for
 
+The sidebar groups these by system, with a dot showing whether that system is
+running. A page whose own system needs something says so in a banner at the top
+rather than looking merely empty.
+
 | Page | Use it when |
 |---|---|
+| **Systems map** | "What is actually running, and where does it run?" |
+| **Guide** | "What do I do next, and in what order?" |
 | Dashboard | A quick read on Instagram volume |
 | Overview | Per-account Instagram health |
 | Inbox | Instagram conversations |
