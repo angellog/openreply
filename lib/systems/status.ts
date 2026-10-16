@@ -14,7 +14,7 @@
 
 import { prisma } from "@/lib/db/client";
 import { isEmailConfigured } from "@/lib/email/send";
-import { AGENT_OFFLINE_AFTER_MS } from "@/lib/harvey/sync";
+import { AGENT_OFFLINE_AFTER_MS, EXPORTABLE_LEAD_WHERE } from "@/lib/harvey/sync";
 import {
   SYSTEM_ORDER,
   SYSTEMS,
@@ -363,8 +363,14 @@ async function probeResources(
       prisma.resourceLead.count({
         where: { workspaceId, createdAt: { gte: since } },
       }),
+      // The sync's own rule, imported rather than restated. Spelled out here
+      // it read "consented and not yet exported", which quietly counted leads
+      // whose delivery email bounced — exactly the ones the export refuses,
+      // because a mistyped address fed to a cold sequence is how a sending
+      // domain earns a bad reputation. The map promised Harvey leads it would
+      // never be given.
       prisma.resourceLead.count({
-        where: { workspaceId, consentMarketing: true, exportedAt: null },
+        where: { workspaceId, ...EXPORTABLE_LEAD_WHERE },
       }),
       prisma.resourceLead.count({
         where: { workspaceId, deliveryStatus: "FAILED" },

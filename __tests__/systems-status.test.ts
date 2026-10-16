@@ -40,6 +40,7 @@ vi.mock("@/lib/email/send", () => ({
 
 import { readSystemStatuses, worstState } from "@/lib/systems/status";
 import { SYSTEMS, type SystemId } from "@/lib/systems/registry";
+import { EXPORTABLE_LEAD_WHERE } from "@/lib/harvey/sync";
 import type { SystemState, SystemStatus } from "@/lib/systems/status";
 
 const ENV_KEYS = [
@@ -328,6 +329,22 @@ describe("Resource hub status", () => {
     const status = statusFor(await readSystemStatuses("ws_1"), "resources");
     expect(status.state).toBe("attention");
     expect(status.summary).toContain("none published");
+  });
+
+  // The map said "Ready for Harvey" using its own spelling of the rule —
+  // consented and not yet exported — which counted leads whose delivery email
+  // bounced. The sync refuses those, so the number promised Harvey leads it
+  // would never be handed. Both now read EXPORTABLE_LEAD_WHERE.
+  it("counts leads Harvey would actually be given, delivery included", async () => {
+    await readSystemStatuses("ws_1");
+
+    const calls = (mocks.resourceLead.count.mock.calls as unknown[][]).map(
+      (call) => (call[0] as { where: Record<string, unknown> }).where
+    );
+    const readyCall = calls.find((where) => where.consentMarketing === true);
+
+    expect(readyCall).toMatchObject(EXPORTABLE_LEAD_WHERE);
+    expect(readyCall?.deliveryStatus).toBe("SENT");
   });
 
   it("links to the live public hub when it is quiet", async () => {

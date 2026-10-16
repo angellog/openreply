@@ -175,20 +175,76 @@ if (existingEmails === 0) {
   }
 }
 
-// Resource hub: a published resource, no claims yet.
-await prisma.resource.upsert({
-  where: { workspaceId_slug: { workspaceId: workspace.id, slug: "wholesale-checklist" } },
-  update: {},
-  create: {
-    workspaceId: workspace.id,
+// Resource hub: a spread of kinds, one with a long description, and one left
+// unpublished — so the hub can be checked for hiding what is not ready.
+const resources = [
+  {
     slug: "wholesale-checklist",
     title: "Wholesale buyer checklist",
     summary: "The eleven questions to ask before placing a first order.",
-    destinationUrl: "https://drive.example.test/checklist",
+    description: null,
     kind: "Checklist",
     isPublished: true,
+    position: 0,
   },
-});
+  {
+    slug: "supplier-vetting-scorecard",
+    title: "Supplier vetting scorecard",
+    summary: "Score a factory on nine things before you wire anything.",
+    description:
+      "A one-page scorecard we fill in before every new supplier.\n\nNine criteria, each scored one to five: sample turnaround, defect rate on the sample run, payment terms offered, willingness to do a partial first order, responsiveness over a week, export paperwork handled in-house or not, references you can actually call, factory ownership of the machines, and whether the quoted price moves when you ask twice.\n\nAnything under 30 out of 45 we walk away from. It is not sophisticated. It is just written down, which turns out to be the whole trick.",
+    kind: "Template",
+    isPublished: true,
+    position: 1,
+  },
+  {
+    slug: "uganda-import-duty-calculator",
+    title: "Uganda import duty calculator",
+    summary: "Landed cost per pair, including URA duty, VAT and clearing.",
+    description:
+      "A spreadsheet that takes FOB price, freight, and HS code and gives you the real landed cost per unit.\n\nPre-filled with the 2026 URA rates for footwear and the clearing fees we actually pay at Malaba. Change the yellow cells only.",
+    kind: "Spreadsheet",
+    isPublished: true,
+    position: 2,
+  },
+  {
+    slug: "pre-order-call-script",
+    title: "The pre-order call script",
+    summary: "What to say on the call that decides whether an order happens.",
+    description: null,
+    kind: "Script",
+    isPublished: true,
+    position: 3,
+  },
+  {
+    slug: "margin-report-2026",
+    title: "2026 sneaker wholesale margin report",
+    summary: "Still being written — should not appear on the public hub.",
+    description: null,
+    kind: "Report",
+    isPublished: false,
+    position: 4,
+  },
+];
+
+for (const resource of resources) {
+  await prisma.resource.upsert({
+    where: { workspaceId_slug: { workspaceId: workspace.id, slug: resource.slug } },
+    update: {
+      title: resource.title,
+      summary: resource.summary,
+      description: resource.description,
+      kind: resource.kind,
+      isPublished: resource.isPublished,
+      position: resource.position,
+    },
+    create: {
+      workspaceId: workspace.id,
+      destinationUrl: `https://drive.example.test/${resource.slug}`,
+      ...resource,
+    },
+  });
+}
 
 console.log("seeded. session token:", SESSION_TOKEN);
 await prisma.$disconnect();
