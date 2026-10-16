@@ -117,6 +117,13 @@ export const COMMAND_TTL_MS = 72 * 60 * 60 * 1000;
  *  that have since moved on, so the UI asks for a fresh look. */
 export const EMAIL_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** How long after its last request an agent is treated as offline. A laptop
+ *  that slept for three days looks identical to a crashed one, so the only
+ *  honest thing to show is how long ago it last spoke. Read by both the agents
+ *  route and the systems status probe — one threshold, so the agent card and
+ *  the systems map can never disagree about whether Harvey is up. */
+export const AGENT_OFFLINE_AFTER_MS = 60 * 60 * 1000;
+
 export function isEmailStale(
   status: string,
   createdAt: Date,

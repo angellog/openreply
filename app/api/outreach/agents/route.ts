@@ -8,6 +8,7 @@ import {
   getCurrentWorkspaceContext,
 } from "@/lib/workspace-access";
 import { normalizeWhatsAppPhone } from "@/lib/whatsapp/ref";
+import { AGENT_OFFLINE_AFTER_MS } from "@/lib/harvey/sync";
 
 /**
  * Pairing and configuring the operator's Harvey agents — one per brand.
@@ -26,7 +27,7 @@ import { normalizeWhatsAppPhone } from "@/lib/whatsapp/ref";
 /** Treat an agent that has not called in this long as offline. Harvey's
  *  default heartbeat is 15 minutes, so this is four missed beats: long enough
  *  to ride out a flaky connection, short enough to notice a closed laptop. */
-const OFFLINE_AFTER_MS = 60 * 60 * 1000;
+
 
 /** Lower-case, dashes and digits. These names appear in URLs and in Harvey's
  *  own config, so they stay boring on purpose. */
@@ -67,9 +68,9 @@ export async function GET() {
         ...agent,
         online:
           agent.lastSeenAt !== null &&
-          now - agent.lastSeenAt.getTime() < OFFLINE_AFTER_MS,
+          now - agent.lastSeenAt.getTime() < AGENT_OFFLINE_AFTER_MS,
       })),
-      offlineAfterSeconds: OFFLINE_AFTER_MS / 1000,
+      offlineAfterSeconds: AGENT_OFFLINE_AFTER_MS / 1000,
     },
   });
 }
