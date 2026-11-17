@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Railway config-as-code SDK, only for railway config plan/apply on .railway/railway.ts",
+  "dependencies": {
+    "railway": "^3.17.0"
+  }
+}
