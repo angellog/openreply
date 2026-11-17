@@ -1,26 +1,23 @@
 "use client";
 
 /**
- * Sidebar Navigation
+ * Sidebar navigation, grouped by system.
  *
- * Text-only nav with active state and workspace section.
+ * It used to be ten links in one list, which was honest about the file layout
+ * and silent about everything an operator needs: which machine a page talks
+ * to, whether that machine is awake, and what has to be true before the page
+ * does anything. Each group is now a system from the registry, with a live
+ * state dot next to its name, so "nothing is happening" and "nothing is
+ * running" stop looking the same.
+ *
+ * The groups come from lib/systems/registry, which is plain data, so the nav
+ * renders before any request finishes. Only the dots wait on the network.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Overview", href: "/overview" },
-  { label: "Inbox", href: "/inbox" },
-  { label: "Campaigns", href: "/campaigns" },
-  { label: "DM Logs", href: "/logs" },
-  { label: "WhatsApp", href: "/whatsapp" },
-  { label: "Outreach", href: "/outreach" },
-  { label: "Resources", href: "/outreach/resources" },
-  { label: "Settings", href: "/settings" },
-  { label: "Diagnostics", href: "/diagnostics" },
-];
+import { listSystems } from "@/lib/systems/registry";
+import { StatusDot, useSystemStatus } from "@/components/system-status";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -34,10 +31,11 @@ export default function Sidebar({
   workspaceName,
 }: SidebarProps) {
   const pathname = usePathname();
+  const { byId } = useSystemStatus();
+  const systems = listSystems();
 
   return (
     <>
-      {/* Mobile overlay */}
       {isOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 lg:hidden"
@@ -64,33 +62,73 @@ export default function Sidebar({
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+        <nav
+          className="flex-1 overflow-y-auto px-3 py-4"
+          aria-label="Systems and pages"
+        >
+          {systems.map((system) => {
+            const status = byId[system.id];
+            const pages = system.pages.filter((page) => !page.hiddenInNav);
+
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                aria-current={isActive ? "page" : undefined}
-                className={`
-                  block px-3 py-2.5 rounded text-sm
-                  ${
-                    isActive
-                      ? "bg-surface-hover text-foreground font-medium"
-                      : "text-muted hover:text-foreground hover:bg-surface-hover"
+              <div key={system.id} className="mb-5 last:mb-0">
+                <Link
+                  href={`/systems#${system.id}`}
+                  onClick={onClose}
+                  className="group flex items-center gap-2 px-3 pb-1.5"
+                  // The system's name leads, then the summary. Chrome names a
+                  // link from its title when one is set, so a title holding
+                  // only the summary would have a screen reader announce
+                  // "12 DMs sent in the last 7 days" with no clue which system
+                  // that is — and the announced name would no longer contain
+                  // the visible label, which is WCAG 2.5.3.
+                  title={
+                    status ? `${system.name} — ${status.summary}` : system.name
                   }
-                `}
-              >
-                {item.label}
-              </Link>
+                >
+                  <StatusDot state={status?.state ?? null} />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted group-hover:text-foreground">
+                    {system.name}
+                  </span>
+                  {status?.state === "attention" && (
+                    <span className="ml-auto text-xs font-medium text-warning">
+                      !
+                    </span>
+                  )}
+                </Link>
+
+                <div className="space-y-0.5">
+                  {pages.map((page) => {
+                    const isActive =
+                      pathname === page.href ||
+                      pathname.startsWith(page.href + "/");
+                    return (
+                      <Link
+                        key={page.href}
+                        href={page.href}
+                        onClick={onClose}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`
+                          block rounded px-3 py-2 text-sm
+                          ${
+                            isActive
+                              ? "bg-surface-hover font-medium text-foreground"
+                              : "text-muted hover:bg-surface-hover hover:text-foreground"
+                          }
+                        `}
+                      >
+                        {page.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
 
-        <div className="px-5 py-4 border-t border-border">
-          <p className="text-sm text-foreground truncate">{workspaceName}</p>
+        <div className="border-t border-border px-5 py-4">
+          <p className="truncate text-sm text-foreground">{workspaceName}</p>
           <p className="text-xs text-muted">Self-hosted</p>
         </div>
       </aside>
