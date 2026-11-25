@@ -15,6 +15,7 @@ import {
   findHarveyEmailForTrackedLink,
   recordOutreachEvent,
 } from "@/lib/outreach/events";
+import { isSignInCodeMessage } from "@/lib/safety/sign-in-codes";
 import { renderMessageWithoutLink } from "@/lib/tracking/message";
 import { chatIdToPhone, extractRefSlug } from "@/lib/whatsapp/ref";
 import {
@@ -66,6 +67,14 @@ export async function handleInboundWhatsAppMessage(
   }
 
   const body = message.body ?? "";
+
+  // This OpenWA session also carries the FeetBit store's sign-in codes. Those
+  // messages belong to the store, not to a campaign: never reply, and never
+  // copy the code into a lead's history. See lib/safety/sign-in-codes.ts.
+  if (isSignInCodeMessage(body)) {
+    return { status: "ignored", reason: "sign-in code message" };
+  }
+
   const refSlug = extractRefSlug(body);
 
   const trackedLink = refSlug

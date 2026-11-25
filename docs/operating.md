@@ -3,6 +3,17 @@
 What you have, what each piece is for, and how to get results out of it.
 [stack.md](stack.md) lists the libraries and hosts; this is the business layer.
 
+Two of this document's jobs have since moved into the product itself, where
+they can show live state instead of describing it:
+
+- **`/systems`** — every system, whether it is actually running right now, what
+  flows between them, and the files and tables each one owns.
+- **`/guide`** — the same ground as this file, in dependency order, with a live
+  state chip against each step. One tap from any page via the `?` in the top bar.
+
+[systems-map.md](systems-map.md) records the provenance and the seams: what came
+from the open-source project, what was fused in here, and where the two touch.
+
 ---
 
 ## The one-sentence version
@@ -65,6 +76,34 @@ login, so Harvey lives where the login lives, and this app is its control panel.
 
 Traffic only goes one way: **Harvey calls out, nothing calls in.** No port to
 forward, no tunnel, nothing exposed on your network.
+
+### KickShot Studio books the campaigns for its reels
+
+KickShot (on your Mac) publishes reels and carousels to your five pages. Every
+reel it books carries an Instagram campaign here — comment **WALL**, get a DM
+with a tracked link — which KickShot creates itself through the service API
+(`/api/service/v1`, bearer token, [kickshot.md](kickshot.md)):
+
+1. Before publishing, KickShot creates the campaign, **switched off**, on the
+   page the reel is going to. A page that is not connected is refused here, so
+   you find out before the reel goes out, not after.
+2. Once the reel is live, KickShot attaches its post id and the campaign
+   switches on.
+3. KickShot reads the stats back (DMs sent, clicks, CTR, WhatsApp leads) for
+   its board.
+
+These are ordinary campaigns: they appear in Campaigns, the DM log and the
+WhatsApp funnel like any other, and you can pause or edit them by hand. Each
+carries KickShot's own reference (`kickshot:<run>:<page>`) so a retry never
+makes a second one.
+
+Like Harvey, KickShot calls out and nothing calls in. Unlike Harvey, it needs no
+pairing per brand: one token covers every connected page in the workspace.
+
+**The store's sign-in codes are never answered.** The WhatsApp number is
+shared with the FeetBit store's sign-in flow, so any message containing
+"FeetBit code" is skipped by every automatic reply on Instagram and WhatsApp,
+whatever a campaign says.
 
 ---
 
@@ -156,8 +195,14 @@ send. That is the entire daily obligation. Nothing goes out otherwise.
 
 ## What each page is for
 
+The sidebar groups these by system, with a dot showing whether that system is
+running. A page whose own system needs something says so in a banner at the top
+rather than looking merely empty.
+
 | Page | Use it when |
 |---|---|
+| **Systems map** | "What is actually running, and where does it run?" |
+| **Guide** | "What do I do next, and in what order?" |
 | Dashboard | A quick read on Instagram volume |
 | Overview | Per-account Instagram health |
 | Inbox | Instagram conversations |
@@ -167,6 +212,7 @@ send. That is the entire daily obligation. Nothing goes out otherwise.
 | **Outreach** | Approve cold email; pair and configure agents |
 | **Resources** | Add and publish lead magnets; see who downloaded |
 | Settings | Connect Instagram and WhatsApp numbers |
+| *(no page)* `/api/service/v1` | KickShot creating and attaching campaigns — see [kickshot.md](kickshot.md) |
 | Diagnostics | Something is wrong and you want the reason |
 
 ---
@@ -216,9 +262,12 @@ tapping your link.
 **Instagram tokens die when you change a password.** Meta invalidates every
 token. Diagnostics names the account; you reconnect it in Settings.
 
-**One Postgres, no preview environment.** Branch previews on Vercel cannot
-build, because every env var is Production-scoped. Changes are verified by
-tests and merged to deploy. A second database would fix it.
+**One Postgres, no preview environment.** Every env var is Production-scoped,
+so a branch preview builds (its Vercel check goes green) but has no database
+behind it. Only Production deploys run migrations
+(`scripts/migrate-on-production.mjs`), so a preview can never touch the real
+database. Changes are verified by tests and merged to deploy. A second
+database would make previews usable.
 
 **Bounces are not yet wired.** An address the provider accepts but the
 recipient's server later rejects still counts as delivered here. Harvey's own
@@ -239,4 +288,8 @@ exclusivity.
 | Agent never checks in at all | Diagnostics names the reason: `bad_signature` (wrong secret), `stale_timestamp` (clock off by >5 min), `AGENT_REVOKED` |
 | No DMs going out | Diagnostics → accounts needing reconnect |
 | Resource email not arriving | The lead row records the delivery error; check Diagnostics |
+| KickShot gets `503` from OpenReply | The service token hash or workspace id is not set on Vercel ([kickshot.md](kickshot.md#making-the-token)) |
+| KickShot gets `401` | Token and hash do not match — usually the hash was made with `echo`, which adds a newline. Use `printf '%s'` |
+| KickShot gets `422 UNKNOWN_ACCOUNT` / `ACCOUNT_NOT_CONNECTED` | That page is not connected, or its token expired. Connect it with Connect Instagram, then `GET /accounts` |
+| A KickShot reel gets comments but no DMs | `GET /campaigns/<ref>`: `isActive: false` or `postId: null` means the post was never attached |
 | `node_modules` vanished again | `cleanup-disk.sh` swept it. `openreply` and `harvey` are in its protected list now |

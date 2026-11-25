@@ -30,6 +30,10 @@ For the step-by-step setup, see [setup.md](setup.md). For what the stack is
   queue, sends the DMs, runs the polling reconciler, and performs the follow-gate
   `is_user_follow_business` checks. **Must stay always-on**, so it cannot run on
   Vercel — it needs an always-on host.
+- **Service API** (`/api/service/v1`, part of the web app): a bearer-token,
+  machine-to-machine door so KickShot Studio on your Mac can create, attach,
+  read and pause the comment-to-DM campaign for each reel it publishes. Off
+  until its token hash is set. Contract: [kickshot.md](kickshot.md).
 - **PostgreSQL**: campaigns, DM logs, accounts, sessions, tracked links, click events.
 - **Redis**: the BullMQ send queue and the per-account rate limiter. Must speak the
   native Redis protocol over TCP (an HTTP-only Redis will not work with BullMQ).
@@ -61,3 +65,7 @@ in the repo. Full descriptions are in [setup.md](setup.md#environment-variables)
 `REDIS_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, `META_GRAPH_API_VERSION`,
 `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `FACEBOOK_APP_SECRET`,
 `WEBHOOK_VERIFY_TOKEN`.
+
+Optional, web app only — the KickShot service API ([kickshot.md](kickshot.md)):
+`OPENREPLY_SERVICE_TOKEN_SHA256`, `OPENREPLY_SERVICE_WORKSPACE_ID`,
+`OPENREPLY_SERVICE_RATE_LIMIT_PER_MINUTE`.

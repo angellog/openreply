@@ -1116,3 +1116,66 @@ describe("DM Worker — DM keyword trigger", () => {
     );
   });
 });
+
+describe("DM Worker — the store's sign-in codes are never answered", () => {
+  // "Any word" campaigns skip keyword matching entirely, so they are the case
+  // a keyword-level guard would miss.
+  const anyWordCampaign = {
+    ...mockAutomation,
+    matchAnyWord: true,
+    dmTriggerEnabled: true,
+    requireFollow: false,
+  };
+
+  beforeEach(() => {
+    mockPrisma.automation.findMany.mockResolvedValue([anyWordCampaign]);
+  });
+
+  it("does not reply to a DM containing a FeetBit code", async () => {
+    const processor = getProcessor();
+    await processor({
+      name: "process-message",
+      data: {
+        instagramAccountId: "ig_456",
+        messageId: "mid_code",
+        messageText: "Your FeetBit code is 482913",
+        senderId: "commenter_999",
+      },
+      id: "message_job_code",
+      attemptsMade: 0,
+    });
+
+    expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    expect(mockSendDirectMessage).not.toHaveBeenCalled();
+    expect(mockSendDirectMessageWithLinkButton).not.toHaveBeenCalled();
+    expect(mockPrisma.dmLog.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not private-reply to a comment containing a FeetBit code", async () => {
+    const processor = getProcessor();
+    await processor(
+      createMockJob({ ...mockJobData, commentText: "feetbit-CODE 482913 pls" })
+    );
+
+    expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    expect(mockSendPrivateReply).not.toHaveBeenCalled();
+    expect(mockSendPrivateReplyWithLinkButton).not.toHaveBeenCalled();
+  });
+
+  it("still answers an ordinary DM on the same campaign", async () => {
+    const processor = getProcessor();
+    await processor({
+      name: "process-message",
+      data: {
+        instagramAccountId: "ig_456",
+        messageId: "mid_plain",
+        messageText: "how much are these?",
+        senderId: "commenter_999",
+      },
+      id: "message_job_plain",
+      attemptsMade: 0,
+    });
+
+    expect(mockSendDirectMessage).toHaveBeenCalled();
+  });
+});

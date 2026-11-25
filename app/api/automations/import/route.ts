@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
+import { campaignFields } from "@/lib/automations/campaign";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -12,7 +13,8 @@ import {
 const campaignSchema = z.object({
   postId: z.string().min(1),
   postUrl: z.string().optional().nullable(),
-  keywords: z.array(z.string().min(1).max(50)).min(1).max(10),
+  // Same keyword rules as a hand-built campaign, sign-in guard included.
+  keywords: campaignFields.keywords.min(1),
   dmMessage: z.string().min(1).max(1000),
   name: z.string().max(100).optional().nullable(),
   goal: z.string().max(120).optional().nullable(),
