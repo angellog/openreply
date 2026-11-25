@@ -27,6 +27,7 @@ import {
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { matchKeywords } from "@/lib/utils/keyword-matcher";
+import { isSignInCodeMessage } from "@/lib/safety/sign-in-codes";
 import { reserveDMSlot } from "@/lib/utils/rate-limiter";
 import {
   releaseWorkspaceDMReservation,
@@ -199,6 +200,10 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     originalMediaId,
   } = job.data;
   const requeueAttempt = job.data.requeueAttempt ?? 0;
+
+  // The store's sign-in flow is never answered by a campaign, whatever its
+  // keywords or "any word" setting. See lib/safety/sign-in-codes.ts.
+  if (isSignInCodeMessage(commentText)) return;
 
   const automations = await prisma.automation.findMany({
     where: {
@@ -945,6 +950,9 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
  */
 async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   const { instagramAccountId, messageId, messageText, senderId } = job.data;
+
+  // Never auto-answer a sign-in code message. See lib/safety/sign-in-codes.ts.
+  if (isSignInCodeMessage(messageText)) return;
 
   const automations = await prisma.automation.findMany({
     where: {

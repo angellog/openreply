@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/db/client";
 import { isEmailConfigured } from "@/lib/email/send";
+import { readServiceConfig } from "@/lib/service/auth";
 import { AGENT_OFFLINE_AFTER_MS, EXPORTABLE_LEAD_WHERE } from "@/lib/harvey/sync";
 import {
   SYSTEM_ORDER,
@@ -88,6 +89,8 @@ async function probeInstagram(
     { label: "Accounts", value: String(accounts.length) },
     { label: "Active campaigns", value: String(activeAutomations) },
     { label: "DMs sent (7d)", value: String(dmsRecent) },
+    // Whether KickShot Studio can create campaigns through /api/service/v1.
+    { label: "KickShot API", value: readServiceConfig() ? "On" : "Off" },
   ];
 
   if (accounts.length === 0) {

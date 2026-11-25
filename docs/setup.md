@@ -103,6 +103,16 @@ Copy `.env.example` to `.env` for local work, or set these in Vercel and Railway
 
 `ENCRYPTION_KEY` must be exactly 64 hex characters or the app throws on boot.
 
+Optional, web app only, for KickShot Studio's service API (`/api/service/v1`).
+Leave unset and every service route answers 503; the dashboard is unaffected.
+How to make the token and the full contract: [kickshot.md](kickshot.md).
+
+| Variable | What it is |
+| --- | --- |
+| `OPENREPLY_SERVICE_TOKEN_SHA256` | Hex SHA-256 of the bearer token KickShot holds. Make the token with `openssl rand -hex 32`, hash it with `printf '%s' '<token>' \| shasum -a 256`. Only the hash lives here. |
+| `OPENREPLY_SERVICE_WORKSPACE_ID` | The one workspace the token may act in. |
+| `OPENREPLY_SERVICE_RATE_LIMIT_PER_MINUTE` | Requests per minute per caller. Default `120`. |
+
 Optional, for tuning the polling reconciler (defaults are fine to start):
 
 | Variable | Default | What it does |

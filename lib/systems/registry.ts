@@ -167,8 +167,17 @@ export const SYSTEMS: Record<SystemId, SystemDefinition> = {
         "/api/dashboard/stats",
         "/api/logs",
         "/r/[slug]",
+        "/api/service/v1/*",
       ],
-      libs: ["lib/meta", "lib/queue", "lib/tracking", "worker/dm-worker.ts"],
+      libs: [
+        "lib/meta",
+        "lib/queue",
+        "lib/tracking",
+        "lib/automations",
+        "lib/service",
+        "lib/safety",
+        "worker/dm-worker.ts",
+      ],
     },
     setup: [
       {
@@ -196,8 +205,16 @@ export const SYSTEMS: Record<SystemId, SystemDefinition> = {
         href: "/logs",
         manual: true,
       },
+      {
+        title: "Optional: let KickShot Studio book campaigns",
+        detail:
+          "KickShot creates a comment-to-DM campaign for every reel it publishes, through the token-protected service API at /api/service/v1. Make a token with openssl rand -hex 32, put only its sha256 in OPENREPLY_SERVICE_TOKEN_SHA256 and this workspace's id in OPENREPLY_SERVICE_WORKSPACE_ID, and give the token itself to KickShot. The full contract is docs/kickshot.md.",
+        manual: true,
+      },
     ],
     limits: [
+      "A KickShot campaign stays switched off until KickShot attaches the published reel. A reel whose publish failed never fires.",
+      "Messages that are part of the store's sign-in flow (\"FeetBit code …\") are never auto-answered by any campaign, on Instagram or WhatsApp. That is deliberate.",
       "Meta only delivers comment webhooks for Professional accounts on a Page. There is no workaround.",
       "A DM can only be sent within 24 hours of the person's comment; Meta closes the window after that.",
       "If the Railway worker is down, DMs queue rather than send. The queue survives, the timing does not.",

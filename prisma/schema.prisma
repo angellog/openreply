@@ -216,6 +216,11 @@ model Automation {
   wholeWordMatch          Boolean  @default(true)
   reportShareSlug         String?  @unique
   reportShareEnabled      Boolean  @default(true)
+  /// Set by a machine client (the service API, /api/service/v1) to find its
+  /// own campaign again, e.g. "kickshot:<run>:<page>". Unique per workspace so
+  /// a retried create can never make a second campaign. Null for campaigns
+  /// built in the dashboard.
+  externalRef             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -227,6 +232,7 @@ model Automation {
   linkClicks       LinkClick[]
   whatsappLeads    WhatsAppLead[]
 
+  @@unique([workspaceId, externalRef])
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
