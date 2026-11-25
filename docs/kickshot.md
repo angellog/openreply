@@ -425,8 +425,9 @@ Nothing here is live until you approve these steps. In order:
 2. **The migration.** One additive migration,
    `20261125120000_add_automation_external_ref`: a nullable `externalRef`
    column on `Automation` plus a unique index on `(workspaceId, externalRef)`.
-   No existing row changes. The Vercel build (`vercel-build`) runs `prisma
-   migrate deploy` itself, so deploying applies it. To apply it ahead of the
+   No existing row changes. The Production build (`vercel-build`, via
+   `scripts/migrate-on-production.mjs`) runs `prisma migrate deploy` itself, so
+   deploying applies it. Preview builds never migrate. To apply it ahead of the
    deploy instead:
    ```bash
    DATABASE_URL="<production public URL>" npm run db:migrate

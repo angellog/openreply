@@ -262,9 +262,12 @@ tapping your link.
 **Instagram tokens die when you change a password.** Meta invalidates every
 token. Diagnostics names the account; you reconnect it in Settings.
 
-**One Postgres, no preview environment.** Branch previews on Vercel cannot
-build, because every env var is Production-scoped. Changes are verified by
-tests and merged to deploy. A second database would fix it.
+**One Postgres, no preview environment.** Every env var is Production-scoped,
+so a branch preview builds (its Vercel check goes green) but has no database
+behind it. Only Production deploys run migrations
+(`scripts/migrate-on-production.mjs`), so a preview can never touch the real
+database. Changes are verified by tests and merged to deploy. A second
+database would make previews usable.
 
 **Bounces are not yet wired.** An address the provider accepts but the
 recipient's server later rejects still counts as delivered here. Harvey's own
